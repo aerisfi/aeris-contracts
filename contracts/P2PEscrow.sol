@@ -2,7 +2,7 @@
 pragma solidity ^0.8.9;
 
 // Uncomment this line to use console.log
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -10,19 +10,30 @@ contract P2PEscrow {
     using SafeERC20 for IERC20;
 
     // Events emitted during the contract functions execution
-    event EscrowDeposit(Transaction transaction);
+    event EscrowDeposit(Transaction indexed transaction);
 
-    event SuccessfulTransaction(string transactionId);
-    event RefundedTransaction(string transactionId);
+    event RefundedTransaction(bytes16 indexed transactionId);
     // End of Events
 
+    // errors
+    error DepositFailure(DepositFailureReason reason);
+    error RefundFailure(RefundFailureReason reason);
     enum TransactionStatus {
         AWAITING_DELIVERY,
         SUCCESS,
         REFUNDED
     }
+    enum DepositFailureReason {
+        INVALID_STATE,
+        INSUFFICIENT_BALANCE
+    }
+    enum RefundFailureReason {
+        REFUND_ONLY_AFTER_TIMEOUT,
+        INVALID_STATE,
+        INSUFFICIENT_BALANCE
+    }
+
     struct Transaction {
-        string transactionId;
         address sender;
         address token;
         uint256 tokenAmount;
@@ -35,21 +46,21 @@ contract P2PEscrow {
 
     uint public transactionTimeoutDuration;
     mapping(address => mapping(address => uint256)) userTokensMapping;
-    mapping(string => Transaction) transactionMap;
+    mapping(bytes16 => Transaction) transactionMap;
 
     constructor() {
         // Set default maturityTime period
         transactionTimeoutDuration = 100000;
     }
 
-    function _pullTokens(address user, address asset, uint256 amount) private {
+    function _pullTokens(address user, address asset, uint256 amount) private  {
         if (asset == address(0)) return;
-        // IERC20(asset).safeTransferFrom(user, address(this), amount);
+        IERC20(asset).safeTransferFrom(user, address(this), amount);
     }
 
-    function _pushTokens(address user, address asset, uint256 amount) private {
+    function _pushTokens(address user, address asset, uint256 amount) private  {
         if (asset == address(0)) return;
-        // IERC20(asset).safeTransferFrom(address(this), user, amount);
+        IERC20(asset).safeTransfer(user, amount);
     }
 
     function setTransactionTimeout(uint timeoutDuration) external {
@@ -62,78 +73,79 @@ contract P2PEscrow {
         address receiverToken,
         uint256 receiverTokenAmount,
         address receiver,
-        string memory transactionId
-    ) external returns (string memory) {
+        bytes16 transactionId
+    ) external returns (bytes16) {
         _pullTokens(msg.sender, token, tokenAmount);
-        userTokensMapping[msg.sender][token] += tokenAmount;
+        uint256 tokenBalance = userTokensMapping[msg.sender][token];
+        unchecked {
+            tokenBalance = tokenBalance + tokenAmount;
+        }
 
-        uint256 timeoutTime = block.timestamp + transactionTimeoutDuration;
         Transaction memory transaction = transactionMap[transactionId];
         if (transaction.sender == address(0)) {
             transaction = Transaction({
-                transactionId: transactionId,
                 sender: msg.sender,
                 token: token,
                 tokenAmount: tokenAmount,
                 receiver: receiver,
                 receiverToken: receiverToken,
                 receiverTokenAmount: receiverTokenAmount,
-                timeoutTime: timeoutTime,
+                timeoutTime: block.timestamp + transactionTimeoutDuration,
                 status: TransactionStatus.AWAITING_DELIVERY
             });
             transactionMap[transactionId] = transaction;
             emit EscrowDeposit(transaction);
+            userTokensMapping[msg.sender][token] = tokenBalance;
             return transactionId;
         }
-        
-        require(
-            transaction.status == TransactionStatus.AWAITING_DELIVERY,
-            "forTransaction can be processed only if it's status is AWAITING_DELIVERY"
-        );
-        require(
-            userTokensMapping[receiver][receiverToken] >= receiverTokenAmount,
-            "peer did not deposit enough tokens"
-        );
+
+        uint256 receiverTokenBalance = userTokensMapping[receiver][
+            receiverToken
+        ];
+        if (transaction.status != TransactionStatus.AWAITING_DELIVERY)
+            revert DepositFailure(DepositFailureReason.INVALID_STATE);
+
+        if (receiverTokenBalance < receiverTokenAmount)
+            revert DepositFailure(DepositFailureReason.INSUFFICIENT_BALANCE);
         _pushTokens(msg.sender, receiverToken, receiverTokenAmount);
-        userTokensMapping[receiver][receiverToken] -= receiverTokenAmount;
+        unchecked {
+            receiverTokenBalance = receiverTokenBalance - receiverTokenAmount;
+        }
 
-        require(
-            transaction.receiverTokenAmount == tokenAmount,
-            "you did not deposit enough token for p2p transaction to be successful"
-        );
+        if (transaction.receiverTokenAmount != tokenAmount)
+            revert DepositFailure(DepositFailureReason.INSUFFICIENT_BALANCE);
         _pushTokens(receiver, token, tokenAmount);
-        userTokensMapping[msg.sender][token] -= tokenAmount;
+        // unchecked {
+        //     tokenBalance = tokenBalance - tokenAmount;
+        // }
 
-        transaction.status = TransactionStatus.SUCCESS;
-        transactionMap[transactionId] = transaction;
-
-        emit SuccessfulTransaction(transactionId);
+        userTokensMapping[receiver][receiverToken] = receiverTokenBalance;
+        // userTokensMapping[msg.sender][token] = tokenBalance;
+        transactionMap[transactionId].status = TransactionStatus.SUCCESS;
 
         return transactionId;
     }
 
-    function refund(string memory transactionId) external {
+    function refund(bytes16 transactionId) external {
         Transaction memory transaction = transactionMap[transactionId];
-        require(
-            block.timestamp > transaction.timeoutTime,
-            "transaction can be refunded only after its timeout period"
-        );
-        require(
-            transaction.status == TransactionStatus.AWAITING_DELIVERY,
-            "transaction can be refunded only if it is awaiting delivery"
-        );
-        require(
-            userTokensMapping[transaction.sender][transaction.token] > 0,
-            "user token balance for the transaction should be non zero"
-        );
+        if (block.timestamp <= transaction.timeoutTime)
+            revert RefundFailure(RefundFailureReason.REFUND_ONLY_AFTER_TIMEOUT);
+        if (transaction.status != TransactionStatus.AWAITING_DELIVERY)
+            revert RefundFailure(RefundFailureReason.INVALID_STATE);
+
+        uint256 tokenBalance = userTokensMapping[transaction.sender][
+            transaction.token
+        ];
+        if (tokenBalance < transaction.tokenAmount)
+            revert RefundFailure(RefundFailureReason.INSUFFICIENT_BALANCE);
 
         _pushTokens(
             transaction.sender,
             transaction.token,
             transaction.tokenAmount
         );
-        userTokensMapping[transaction.sender][transaction.token] -= transaction
-            .tokenAmount;
+        tokenBalance -= transaction.tokenAmount;
+        userTokensMapping[transaction.sender][transaction.token] = tokenBalance;
         transaction.status = TransactionStatus.REFUNDED;
         transactionMap[transactionId] = transaction;
 
@@ -141,7 +153,7 @@ contract P2PEscrow {
     }
 
     function getTransaction(
-        string memory transactionId
+        bytes16 transactionId
     ) external view returns (Transaction memory) {
         require(
             transactionMap[transactionId].sender != address(0),

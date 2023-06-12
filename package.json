@@ -1,10 +1,22 @@
 {
   "name": "hardhat-project",
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^3.0.0",
-    "hardhat": "^2.15.0"
+    "@nomicfoundation/hardhat-toolbox": "^2.0.1",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.8",
+    "@typechain/ethers-v5": "^10.2.0",
+    "@typechain/hardhat": "^6.1.5",
+    "@nomiclabs/hardhat-ethers": "^2.2.2",
+    "@nomiclabs/hardhat-etherscan": "^3.1.6",
+    "buidler-gas-reporter": "^0.1.4",
+    "solidity-coverage": "^0.8.2",
+    "hardhat-gas-reporter": "^1.0.9",
+    "hardhat-deploy": "^0.11.20",
+
+    "hardhat": "^2.12.7",
+    "ethers": "^5.7.2"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^4.9.1"
+    "@openzeppelin/contracts": "^4.9.1",
+    "dotenv": "^16.1.4"
   }
 }
