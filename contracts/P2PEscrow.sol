@@ -2,7 +2,7 @@
 pragma solidity ^0.8.9;
 
 // Uncomment this line to use console.log
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -44,7 +44,6 @@ contract P2PEscrow {
     }
 
     uint public transactionTimeoutDuration;
-    mapping(address => mapping(uint256 => uint256)) userTokensMapping;
     mapping(bytes16 => Transaction) transactionMap;
     address[] tokens;
 
@@ -89,15 +88,10 @@ contract P2PEscrow {
         require(tokenId < tokensLength(), "invalid tokenId");
         require(swapTokenId < tokensLength(), "invalid swap token id");
 
-        uint256 tokenBalance = userTokensMapping[msg.sender][tokenId];
-
         Transaction memory transaction = transactionMap[transactionId];
         if (transaction.sender == address(0)) {
 
             _pullTokens(msg.sender, tokens[tokenId], tokenAmount);
-            unchecked {
-                tokenBalance = tokenBalance + tokenAmount;
-            }
 
             transactionMap[transactionId].sender = msg.sender;
             transactionMap[transactionId].tokenId = tokenId;
@@ -108,11 +102,10 @@ contract P2PEscrow {
             transactionMap[transactionId].status = TransactionStatus.AWAITING_DELIVERY;
 
             emit EscrowDeposit(transactionId);
-            userTokensMapping[msg.sender][tokenId] = tokenBalance;
             return transactionId;
         }
         address swapToken = tokens[swapTokenId];
-        uint256 swapTokenBalance = userTokensMapping[transaction.sender][swapTokenId];
+        uint256 swapTokenBalance = IERC20(swapToken).balanceOf(address(this));
 
         if (transaction.status != TransactionStatus.AWAITING_DELIVERY)
             revert DepositFailure(DepositFailureReason.INVALID_STATE);
@@ -120,15 +113,11 @@ contract P2PEscrow {
         if (swapTokenBalance < swapTokenTokenAmount)
             revert DepositFailure(DepositFailureReason.INSUFFICIENT_BALANCE);
         _pushTokens(msg.sender, swapToken, swapTokenTokenAmount);
-        unchecked {
-            swapTokenBalance = swapTokenBalance - swapTokenTokenAmount;
-        }
 
         if (transaction.swapTokenAmount != tokenAmount)
             revert DepositFailure(DepositFailureReason.INSUFFICIENT_BALANCE);
         _sendTokens(msg.sender, transaction.sender, tokens[tokenId], tokenAmount);
 
-        userTokensMapping[transaction.sender][swapTokenId] = swapTokenBalance;
         transactionMap[transactionId].status = TransactionStatus.SUCCESS;
 
         return transactionId;
@@ -141,19 +130,12 @@ contract P2PEscrow {
         if (transaction.status != TransactionStatus.AWAITING_DELIVERY)
             revert RefundFailure(RefundFailureReason.INVALID_STATE);
 
-        uint256 tokenBalance = userTokensMapping[transaction.sender][
-            transaction.tokenId
-        ];
-        if (tokenBalance < transaction.tokenAmount)
-            revert RefundFailure(RefundFailureReason.INSUFFICIENT_BALANCE);
-
         _pushTokens(
             transaction.sender,
             tokens[transaction.tokenId],
             transaction.tokenAmount
         );
-        tokenBalance -= transaction.tokenAmount;
-        userTokensMapping[transaction.sender][transaction.tokenId] = tokenBalance;
+
         transaction.status = TransactionStatus.REFUNDED;
         transactionMap[transactionId] = transaction;
 
@@ -170,12 +152,6 @@ contract P2PEscrow {
         return transactionMap[transactionId];
     }
 
-    function getUserBalances(
-        address user,
-        uint tokenId
-    ) external view returns (uint256) {
-        return userTokensMapping[user][tokenId];
-    }
 
     function getTokenIndex(address token) public view returns (int) {
         for (uint i = 0; i < tokens.length; i++) {

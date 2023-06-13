@@ -85,6 +85,9 @@ describe("P2PEscrow", function () {
       const receiverAddress = otherAccount.address;
       const transactionId = "0x31000000000000000000000000000000";
       await sendSimpleToken.approve(p2pEscrow.address, sendAmount);
+      const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
+        owner.address
+      );
       await p2pEscrow.deposit(
         sendTokenId,
         sendAmount,
@@ -92,9 +95,11 @@ describe("P2PEscrow", function () {
         receiveAmount,
         transactionId
       );
-      expect(
-        await p2pEscrow.getUserBalances(owner.address, sendTokenId)
-      ).to.be.eq(sendAmount);
+
+      const balanceAfterDeposit = await sendSimpleToken.balanceOf(
+        owner.address
+      );
+      expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(sendAmount);
     });
 
     it("Should successfully complete peer to peer transfer", async function () {
@@ -110,6 +115,8 @@ describe("P2PEscrow", function () {
 
       const receiverAddress = otherAccount.address;
       const transactionId = "0x31000000000000000000000000000000";
+      let balanceBeforeDeposit = await sendSimpleToken.balanceOf(owner.address);
+
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT);
       console.log(
         "gas estimate - user a deposits",
@@ -128,15 +135,18 @@ describe("P2PEscrow", function () {
         RECEIVE_AMOUNT,
         transactionId
       );
-      expect(
-        await p2pEscrow.getUserBalances(owner.address, sendSimpleTokenId)
-      ).to.be.eq(SEND_AMOUNT);
+
+      let balanceAfterDeposit = await sendSimpleToken.balanceOf(owner.address);
+      expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(SEND_AMOUNT);
 
       const otherUserP2pEscrow = p2pEscrow.connect(otherAccount);
       await receiveSimpleToken
         .connect(otherAccount)
         .approve(p2pEscrow.address, RECEIVE_AMOUNT);
 
+      balanceBeforeDeposit = await receiveSimpleToken.balanceOf(
+        otherAccount.address
+      );
       console.log(
         "gas estimate - user b deposits",
         await otherUserP2pEscrow.estimateGas.deposit(
@@ -154,15 +164,19 @@ describe("P2PEscrow", function () {
         SEND_AMOUNT,
         transactionId
       );
-      expect(
-        await otherUserP2pEscrow.getUserBalances(
-          otherAccount.address,
-          receiveSimpleTokenId
-        )
-      ).to.be.eq(0);
-      expect(
-        await p2pEscrow.getUserBalances(owner.address, sendSimpleTokenId)
-      ).to.be.eq(0);
+      balanceAfterDeposit = await receiveSimpleToken.balanceOf(
+        otherAccount.address
+      );
+      expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(
+        RECEIVE_AMOUNT
+      );
+
+      expect(await sendSimpleToken.balanceOf(otherAccount.address)).equals(
+        SEND_AMOUNT
+      );
+      expect(await receiveSimpleToken.balanceOf(owner.address)).equals(
+        RECEIVE_AMOUNT
+      );
     });
 
     it("Should refund AWAITING_DELIVERY transaction", async function () {
@@ -178,6 +192,9 @@ describe("P2PEscrow", function () {
       const receiverAddress = otherAccount.address;
       const transactionId = "0x31000000000000000000000000000000";
       await p2pEscrow.setTransactionTimeout(0);
+      const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
+        owner.address
+      );
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT);
       await p2pEscrow.deposit(
         sendSimpleTokenId,
@@ -186,16 +203,19 @@ describe("P2PEscrow", function () {
         RECEIVE_AMOUNT,
         transactionId
       );
-      expect(
-        await p2pEscrow.getUserBalances(owner.address, sendSimpleTokenId)
-      ).to.be.eq(SEND_AMOUNT);
-      // Ensure Transaction status is AWAITING_DELIVERY
+      const balanceAfterDeposit = await sendSimpleToken.balanceOf(
+        owner.address
+      );
+      expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(SEND_AMOUNT);
+
       expect(
         await p2pEscrow.getTransaction(transactionId).then((tx) => tx.status)
       ).to.be.eq(0);
       await expect(p2pEscrow.refund(transactionId))
         .to.emit(p2pEscrow, "RefundedTransaction")
         .withArgs(transactionId);
+      const balanceAfterRefund = await sendSimpleToken.balanceOf(owner.address);
+      expect(balanceBeforeDeposit).equals(balanceAfterRefund);
     });
 
     it("Should set transaction status to REFUNDED", async function () {
@@ -212,6 +232,9 @@ describe("P2PEscrow", function () {
       const transactionId = "0x31000000000000000000000000000000";
       await p2pEscrow.setTransactionTimeout(0);
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT);
+      const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
+        owner.address
+      );
       await p2pEscrow.deposit(
         sendSimpleTokenId,
         SEND_AMOUNT,
@@ -219,9 +242,12 @@ describe("P2PEscrow", function () {
         RECEIVE_AMOUNT,
         transactionId
       );
-      expect(
-        await p2pEscrow.getUserBalances(owner.address, sendSimpleTokenId)
-      ).to.be.eq(SEND_AMOUNT);
+
+      const balanceAfterDeposit = await sendSimpleToken.balanceOf(
+        owner.address
+      );
+      expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(SEND_AMOUNT);
+
       await expect(p2pEscrow.refund(transactionId))
         .to.emit(p2pEscrow, "RefundedTransaction")
         .withArgs(transactionId);
@@ -244,6 +270,10 @@ describe("P2PEscrow", function () {
       const receiverAddress = otherAccount.address;
       const transactionId = "0x31000000000000000000000000000000";
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT);
+      const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
+        owner.address
+      );
+
       await p2pEscrow.deposit(
         sendSimpleTokenId,
         SEND_AMOUNT,
@@ -251,9 +281,11 @@ describe("P2PEscrow", function () {
         RECEIVE_AMOUNT,
         transactionId
       );
-      expect(
-        await p2pEscrow.getUserBalances(owner.address, sendSimpleTokenId)
-      ).to.be.eq(SEND_AMOUNT);
+      const balanceAfterDeposit = await sendSimpleToken.balanceOf(
+        owner.address
+      );
+      expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(SEND_AMOUNT);
+
       await expect(p2pEscrow.refund(transactionId)).to.be.reverted;
     });
 
@@ -271,6 +303,10 @@ describe("P2PEscrow", function () {
       const transactionId = "0x31000000000000000000000000000000";
       await p2pEscrow.setTransactionTimeout(0);
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT * 2);
+      const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
+        owner.address
+      );
+
       await p2pEscrow.deposit(
         sendSimpleTokenId,
         SEND_AMOUNT,
@@ -285,9 +321,13 @@ describe("P2PEscrow", function () {
         RECEIVE_AMOUNT,
         "0x32000000000000000000000000000000"
       );
-      expect(
-        await p2pEscrow.getUserBalances(owner.address, sendSimpleTokenId)
-      ).to.be.eq(SEND_AMOUNT * 2);
+      const balanceAfterDeposit = await sendSimpleToken.balanceOf(
+        owner.address
+      );
+      expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(
+        2 * SEND_AMOUNT
+      );
+
       await expect(p2pEscrow.refund(transactionId))
         .to.emit(p2pEscrow, "RefundedTransaction")
         .withArgs(transactionId);
