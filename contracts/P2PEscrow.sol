@@ -13,15 +13,20 @@ contract P2PEscrow {
     event EscrowDeposit(bytes16 indexed transactionId);
 
     event RefundedTransaction(bytes16 indexed transactionId);
+    event CancelledOrder(bytes16 indexed transactionId);
+
     // End of Events
 
     // errors
     error DepositFailure(DepositFailureReason reason);
     error RefundFailure(RefundFailureReason reason);
+    error CacncelOrderFailure(CancelOrderFailureReason reason);
+
     enum TransactionStatus {
         AWAITING_DELIVERY,
         SUCCESS,
-        REFUNDED
+        REFUNDED,
+        CANCELLED
     }
     enum DepositFailureReason {
         INVALID_STATE,
@@ -29,8 +34,11 @@ contract P2PEscrow {
     }
     enum RefundFailureReason {
         REFUND_ONLY_AFTER_TIMEOUT,
-        INVALID_STATE,
-        INSUFFICIENT_BALANCE
+        INVALID_STATE
+    }
+    enum CancelOrderFailureReason {
+        ONLY_ORDER_CREATOR_CANCEL,
+        INVALID_STATE
     }
 
     struct Transaction {
@@ -41,7 +49,6 @@ contract P2PEscrow {
         uint16 tokenId;
         uint16 swapTokenId;
         TransactionStatus status;
-
     }
 
     uint32 public transactionTimeoutDuration;
@@ -106,8 +113,10 @@ contract P2PEscrow {
             return transactionId;
         }
 
-        if (transactionMap[transactionId].status != TransactionStatus.AWAITING_DELIVERY)
-            revert DepositFailure(DepositFailureReason.INVALID_STATE);
+        if (
+            transactionMap[transactionId].status !=
+            TransactionStatus.AWAITING_DELIVERY
+        ) revert DepositFailure(DepositFailureReason.INVALID_STATE);
 
         address swapToken = tokens[swapTokenId];
         uint256 swapTokenBalance = IERC20(swapToken).balanceOf(address(this));
@@ -127,6 +136,26 @@ contract P2PEscrow {
         transactionMap[transactionId].status = TransactionStatus.SUCCESS;
 
         return transactionId;
+    }
+
+    function cancelOrder(bytes16 transactionId) external {
+        Transaction memory transaction = transactionMap[transactionId];
+        if (msg.sender != transaction.sender)
+            revert CacncelOrderFailure(
+                CancelOrderFailureReason.ONLY_ORDER_CREATOR_CANCEL
+            );
+        if (transaction.status != TransactionStatus.AWAITING_DELIVERY)
+            revert CacncelOrderFailure(CancelOrderFailureReason.INVALID_STATE);
+
+        _pushTokens(
+            transaction.sender,
+            tokens[transaction.tokenId],
+            transaction.tokenAmount
+        );
+
+        transactionMap[transactionId].status = TransactionStatus.CANCELLED;
+
+        emit CancelledOrder(transactionId);
     }
 
     function refund(bytes16 transactionId) external {
