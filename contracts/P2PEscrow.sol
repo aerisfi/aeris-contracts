@@ -35,23 +35,25 @@ contract P2PEscrow {
 
     struct Transaction {
         address sender;
-        address token;
-        address receiver;
-        address receiverToken;
-        uint256 tokenAmount;
-        uint256 receiverTokenAmount;
-        uint256 timeoutTime;
+        uint tokenId;
+        uint swapTokenId;
+        uint tokenAmount;
+        uint swapTokenAmount;
+        uint timeoutTime;
         TransactionStatus status;
     }
 
     uint public transactionTimeoutDuration;
-    mapping(address => mapping(address => uint256)) userTokensMapping;
+    mapping(address => mapping(uint256 => uint256)) userTokensMapping;
     mapping(bytes16 => Transaction) transactionMap;
+    address[] tokens;
 
     constructor() {
         // Set default maturityTime period
         transactionTimeoutDuration = 100000;
     }
+
+
 
     function _pullTokens(address user, address asset, uint256 amount) private {
         if (asset == address(0)) return;
@@ -78,55 +80,55 @@ contract P2PEscrow {
     }
 
     function deposit(
-        address token,
-        uint256 tokenAmount,
-        address receiverToken,
-        uint256 receiverTokenAmount,
-        address receiver,
+        uint tokenId,
+        uint tokenAmount,
+        uint swapTokenId,
+        uint swapTokenTokenAmount,
         bytes16 transactionId
     ) external returns (bytes16) {
-        uint256 tokenBalance = userTokensMapping[msg.sender][token];
+        require(tokenId < tokensLength(), "invalid tokenId");
+        require(swapTokenId < tokensLength(), "invalid swap token id");
+
+        uint256 tokenBalance = userTokensMapping[msg.sender][tokenId];
 
         Transaction memory transaction = transactionMap[transactionId];
         if (transaction.sender == address(0)) {
 
-            _pullTokens(msg.sender, token, tokenAmount);
+            _pullTokens(msg.sender, tokens[tokenId], tokenAmount);
             unchecked {
                 tokenBalance = tokenBalance + tokenAmount;
             }
 
             transactionMap[transactionId].sender = msg.sender;
-            transactionMap[transactionId].token = token;
-            transactionMap[transactionId].receiverToken = receiverToken;
+            transactionMap[transactionId].tokenId = tokenId;
+            transactionMap[transactionId].swapTokenId = swapTokenId;
             transactionMap[transactionId].tokenAmount = tokenAmount;
-            transactionMap[transactionId].receiver = receiver;
-            transactionMap[transactionId].receiverTokenAmount = receiverTokenAmount;
+            transactionMap[transactionId].swapTokenAmount = swapTokenTokenAmount;
             transactionMap[transactionId].timeoutTime = block.timestamp + transactionTimeoutDuration;
             transactionMap[transactionId].status = TransactionStatus.AWAITING_DELIVERY;
 
             emit EscrowDeposit(transactionId);
-            userTokensMapping[msg.sender][token] = tokenBalance;
+            userTokensMapping[msg.sender][tokenId] = tokenBalance;
             return transactionId;
         }
+        address swapToken = tokens[swapTokenId];
+        uint256 swapTokenBalance = userTokensMapping[transaction.sender][swapTokenId];
 
-        uint256 receiverTokenBalance = userTokensMapping[receiver][
-            receiverToken
-        ];
         if (transaction.status != TransactionStatus.AWAITING_DELIVERY)
             revert DepositFailure(DepositFailureReason.INVALID_STATE);
 
-        if (receiverTokenBalance < receiverTokenAmount)
+        if (swapTokenBalance < swapTokenTokenAmount)
             revert DepositFailure(DepositFailureReason.INSUFFICIENT_BALANCE);
-        _pushTokens(msg.sender, receiverToken, receiverTokenAmount);
+        _pushTokens(msg.sender, swapToken, swapTokenTokenAmount);
         unchecked {
-            receiverTokenBalance = receiverTokenBalance - receiverTokenAmount;
+            swapTokenBalance = swapTokenBalance - swapTokenTokenAmount;
         }
 
-        if (transaction.receiverTokenAmount != tokenAmount)
+        if (transaction.swapTokenAmount != tokenAmount)
             revert DepositFailure(DepositFailureReason.INSUFFICIENT_BALANCE);
-        _sendTokens(msg.sender, receiver, token, tokenAmount);
+        _sendTokens(msg.sender, transaction.sender, tokens[tokenId], tokenAmount);
 
-        userTokensMapping[receiver][receiverToken] = receiverTokenBalance;
+        userTokensMapping[transaction.sender][swapTokenId] = swapTokenBalance;
         transactionMap[transactionId].status = TransactionStatus.SUCCESS;
 
         return transactionId;
@@ -140,18 +142,18 @@ contract P2PEscrow {
             revert RefundFailure(RefundFailureReason.INVALID_STATE);
 
         uint256 tokenBalance = userTokensMapping[transaction.sender][
-            transaction.token
+            transaction.tokenId
         ];
         if (tokenBalance < transaction.tokenAmount)
             revert RefundFailure(RefundFailureReason.INSUFFICIENT_BALANCE);
 
         _pushTokens(
             transaction.sender,
-            transaction.token,
+            tokens[transaction.tokenId],
             transaction.tokenAmount
         );
         tokenBalance -= transaction.tokenAmount;
-        userTokensMapping[transaction.sender][transaction.token] = tokenBalance;
+        userTokensMapping[transaction.sender][transaction.tokenId] = tokenBalance;
         transaction.status = TransactionStatus.REFUNDED;
         transactionMap[transactionId] = transaction;
 
@@ -170,9 +172,27 @@ contract P2PEscrow {
 
     function getUserBalances(
         address user,
-        address token
+        uint tokenId
     ) external view returns (uint256) {
-        return userTokensMapping[user][token];
+        return userTokensMapping[user][tokenId];
+    }
+
+    function getTokenIndex(address token) public view returns (int) {
+        for (uint i = 0; i < tokens.length; i++) {
+            if(tokens[i] == token) return int(i);
+        }
+        return -1;
+    }
+
+    function addToken(address token) external returns (uint256) {
+        int tokenIndex = getTokenIndex(token);
+        if(tokenIndex != -1) return uint(tokenIndex);
+        tokens.push(token);
+        return tokens.length - 1;
+    }
+
+    function tokensLength() public view returns (uint) {
+        return tokens.length;
     }
 }
 
