@@ -35,15 +35,16 @@ contract P2PEscrow {
 
     struct Transaction {
         address sender;
-        uint tokenId;
-        uint swapTokenId;
-        uint tokenAmount;
-        uint swapTokenAmount;
-        uint timeoutTime;
+        uint96 swapTokenAmount;
+        uint96 tokenAmount;
+        uint32 timeoutTime;
+        uint16 tokenId;
+        uint16 swapTokenId;
         TransactionStatus status;
+
     }
 
-    uint public transactionTimeoutDuration;
+    uint32 public transactionTimeoutDuration;
     mapping(bytes16 => Transaction) transactionMap;
     address[] tokens;
 
@@ -51,8 +52,6 @@ contract P2PEscrow {
         // Set default maturityTime period
         transactionTimeoutDuration = 100000;
     }
-
-
 
     function _pullTokens(address user, address asset, uint256 amount) private {
         if (asset == address(0)) return;
@@ -74,56 +73,63 @@ contract P2PEscrow {
         IERC20(asset).safeTransferFrom(sender, receiver, amount);
     }
 
-    function setTransactionTimeout(uint timeoutDuration) external {
+    function setTransactionTimeout(uint32 timeoutDuration) external {
         transactionTimeoutDuration = timeoutDuration;
     }
 
     function deposit(
-        uint tokenId,
-        uint tokenAmount,
-        uint swapTokenId,
-        uint swapTokenTokenAmount,
+        uint16 tokenId,
+        uint96 tokenAmount,
+        uint16 swapTokenId,
+        uint96 swapTokenTokenAmount,
         bytes16 transactionId
     ) external returns (bytes16) {
         require(tokenId < tokensLength(), "invalid tokenId");
         require(swapTokenId < tokensLength(), "invalid swap token id");
 
-        Transaction memory transaction = transactionMap[transactionId];
-        if (transaction.sender == address(0)) {
-
+        if (transactionMap[transactionId].sender == address(0)) {
             _pullTokens(msg.sender, tokens[tokenId], tokenAmount);
 
             transactionMap[transactionId].sender = msg.sender;
             transactionMap[transactionId].tokenId = tokenId;
             transactionMap[transactionId].swapTokenId = swapTokenId;
             transactionMap[transactionId].tokenAmount = tokenAmount;
-            transactionMap[transactionId].swapTokenAmount = swapTokenTokenAmount;
-            transactionMap[transactionId].timeoutTime = block.timestamp + transactionTimeoutDuration;
-            transactionMap[transactionId].status = TransactionStatus.AWAITING_DELIVERY;
+            transactionMap[transactionId]
+                .swapTokenAmount = swapTokenTokenAmount;
+            transactionMap[transactionId].timeoutTime =
+                uint32(block.timestamp) +
+                transactionTimeoutDuration;
+            transactionMap[transactionId].status = TransactionStatus
+                .AWAITING_DELIVERY;
 
             emit EscrowDeposit(transactionId);
             return transactionId;
         }
-        address swapToken = tokens[swapTokenId];
-        uint256 swapTokenBalance = IERC20(swapToken).balanceOf(address(this));
 
-        if (transaction.status != TransactionStatus.AWAITING_DELIVERY)
+        if (transactionMap[transactionId].status != TransactionStatus.AWAITING_DELIVERY)
             revert DepositFailure(DepositFailureReason.INVALID_STATE);
 
+        address swapToken = tokens[swapTokenId];
+        uint256 swapTokenBalance = IERC20(swapToken).balanceOf(address(this));
         if (swapTokenBalance < swapTokenTokenAmount)
             revert DepositFailure(DepositFailureReason.INSUFFICIENT_BALANCE);
         _pushTokens(msg.sender, swapToken, swapTokenTokenAmount);
 
-        if (transaction.swapTokenAmount != tokenAmount)
+        if (transactionMap[transactionId].swapTokenAmount != tokenAmount)
             revert DepositFailure(DepositFailureReason.INSUFFICIENT_BALANCE);
-        _sendTokens(msg.sender, transaction.sender, tokens[tokenId], tokenAmount);
+        _sendTokens(
+            msg.sender,
+            transactionMap[transactionId].sender,
+            tokens[tokenId],
+            tokenAmount
+        );
 
         transactionMap[transactionId].status = TransactionStatus.SUCCESS;
 
         return transactionId;
     }
 
-    function refund(bytes16 transactionId)  external {
+    function refund(bytes16 transactionId) external {
         Transaction memory transaction = transactionMap[transactionId];
         if (block.timestamp <= transaction.timeoutTime)
             revert RefundFailure(RefundFailureReason.REFUND_ONLY_AFTER_TIMEOUT);
@@ -136,8 +142,7 @@ contract P2PEscrow {
             transaction.tokenAmount
         );
 
-        transaction.status = TransactionStatus.REFUNDED;
-        transactionMap[transactionId] = transaction;
+        transactionMap[transactionId].status = TransactionStatus.REFUNDED;
 
         emit RefundedTransaction(transactionId);
     }
@@ -152,17 +157,16 @@ contract P2PEscrow {
         return transactionMap[transactionId];
     }
 
-
     function getTokenIndex(address token) public view returns (int) {
         for (uint i = 0; i < tokens.length; i++) {
-            if(tokens[i] == token) return int(i);
+            if (tokens[i] == token) return int(i);
         }
         return -1;
     }
 
     function addToken(address token) external returns (uint256) {
         int tokenIndex = getTokenIndex(token);
-        if(tokenIndex != -1) return uint(tokenIndex);
+        if (tokenIndex != -1) return uint(tokenIndex);
         tokens.push(token);
         return tokens.length - 1;
     }
@@ -171,5 +175,3 @@ contract P2PEscrow {
         return tokens.length;
     }
 }
-
-
