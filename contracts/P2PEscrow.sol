@@ -11,6 +11,7 @@ contract P2PEscrow {
 
     // Events emitted during the contract functions execution
     event MarketOrderDeposit(bytes16 indexed orderId);
+    event LimitOrderDeposit(bytes16 indexed orderId);
 
     event RefundedOrder(bytes16 indexed orderId);
     event CancelledOrder(bytes16 indexed orderId);
@@ -21,6 +22,11 @@ contract P2PEscrow {
     error MarketOrderFailure(MarketOrderFailureReason reason);
     error RefundFailure(RefundFailureReason reason);
     error CacncelOrderFailure(CancelOrderFailureReason reason);
+
+    enum OrderType {
+        MARKET_ORDER,
+        LIMIT_ORDER
+    }
 
     enum OrderStatus {
         AWAITING_DELIVERY,
@@ -49,6 +55,7 @@ contract P2PEscrow {
         uint16 tokenId;
         uint16 swapTokenId;
         OrderStatus status;
+        OrderType orderType;
     }
 
     uint32 public orderTimeoutDuration;
@@ -85,13 +92,15 @@ contract P2PEscrow {
         orderTimeoutDuration = timeoutDuration;
     }
 
-    function marketOrder(
+    function executeOrder(
         uint16 tokenId,
         uint96 tokenAmount,
         uint16 swapTokenId,
         uint96 swapTokenTokenAmount,
-        bytes16 orderId
-    ) external returns (bytes16) {
+        uint32 timeoutTime,
+        bytes16 orderId,
+        OrderType orderType
+    ) internal returns (bytes16) {
         require(tokenId < tokensLength(), "invalid tokenId");
         require(swapTokenId < tokensLength(), "invalid swap token id");
 
@@ -102,31 +111,33 @@ contract P2PEscrow {
             orderMap[orderId].tokenId = tokenId;
             orderMap[orderId].swapTokenId = swapTokenId;
             orderMap[orderId].tokenAmount = tokenAmount;
-            orderMap[orderId]
-                .swapTokenAmount = swapTokenTokenAmount;
-            orderMap[orderId].timeoutTime =
-                uint32(block.timestamp) +
-                orderTimeoutDuration;
-            orderMap[orderId].status = OrderStatus
-                .AWAITING_DELIVERY;
+            orderMap[orderId].swapTokenAmount = swapTokenTokenAmount;
+            orderMap[orderId].timeoutTime = timeoutTime;
+            orderMap[orderId].status = OrderStatus.AWAITING_DELIVERY;
+            orderMap[orderId].orderType = orderType;
 
-            emit MarketOrderDeposit(orderId);
+            if (orderType == OrderType.MARKET_ORDER)
+                emit MarketOrderDeposit(orderId);
+            else emit LimitOrderDeposit(orderId);
+
             return orderId;
         }
 
-        if (
-            orderMap[orderId].status !=
-            OrderStatus.AWAITING_DELIVERY
-        ) revert MarketOrderFailure(MarketOrderFailureReason.INVALID_STATE);
+        if (orderMap[orderId].status != OrderStatus.AWAITING_DELIVERY)
+            revert MarketOrderFailure(MarketOrderFailureReason.INVALID_STATE);
 
         address swapToken = tokens[swapTokenId];
         uint256 swapTokenBalance = IERC20(swapToken).balanceOf(address(this));
         if (swapTokenBalance < swapTokenTokenAmount)
-            revert MarketOrderFailure(MarketOrderFailureReason.INSUFFICIENT_BALANCE);
+            revert MarketOrderFailure(
+                MarketOrderFailureReason.INSUFFICIENT_BALANCE
+            );
         _pushTokens(msg.sender, swapToken, swapTokenTokenAmount);
 
         if (orderMap[orderId].swapTokenAmount != tokenAmount)
-            revert MarketOrderFailure(MarketOrderFailureReason.INSUFFICIENT_BALANCE);
+            revert MarketOrderFailure(
+                MarketOrderFailureReason.INSUFFICIENT_BALANCE
+            );
         _sendTokens(
             msg.sender,
             orderMap[orderId].sender,
@@ -139,6 +150,45 @@ contract P2PEscrow {
         return orderId;
     }
 
+    function marketOrder(
+        uint16 tokenId,
+        uint96 tokenAmount,
+        uint16 swapTokenId,
+        uint96 swapTokenTokenAmount,
+        bytes16 orderId
+    ) external returns (bytes16) {
+        return
+            executeOrder(
+                tokenId,
+                tokenAmount,
+                swapTokenId,
+                swapTokenTokenAmount,
+                uint32(block.timestamp + orderTimeoutDuration),
+                orderId,
+                OrderType.MARKET_ORDER
+            );
+    }
+
+    function limitOrder(
+        uint16 tokenId,
+        uint96 tokenAmount,
+        uint16 swapTokenId,
+        uint96 swapTokenTokenAmount,
+        uint32 timeoutTime,
+        bytes16 orderId
+    ) external returns (bytes16) {
+        return
+            executeOrder(
+                tokenId,
+                tokenAmount,
+                swapTokenId,
+                swapTokenTokenAmount,
+                timeoutTime,
+                orderId,
+                OrderType.LIMIT_ORDER
+            );
+    }
+
     function cancelOrder(bytes16 orderId) external {
         Order memory order = orderMap[orderId];
         if (msg.sender != order.sender)
@@ -148,11 +198,7 @@ contract P2PEscrow {
         if (order.status != OrderStatus.AWAITING_DELIVERY)
             revert CacncelOrderFailure(CancelOrderFailureReason.INVALID_STATE);
 
-        _pushTokens(
-            order.sender,
-            tokens[order.tokenId],
-            order.tokenAmount
-        );
+        _pushTokens(order.sender, tokens[order.tokenId], order.tokenAmount);
 
         orderMap[orderId].status = OrderStatus.CANCELLED;
 
@@ -166,24 +212,15 @@ contract P2PEscrow {
         if (order.status != OrderStatus.AWAITING_DELIVERY)
             revert RefundFailure(RefundFailureReason.INVALID_STATE);
 
-        _pushTokens(
-            order.sender,
-            tokens[order.tokenId],
-            order.tokenAmount
-        );
+        _pushTokens(order.sender, tokens[order.tokenId], order.tokenAmount);
 
         orderMap[orderId].status = OrderStatus.REFUNDED;
 
         emit RefundedOrder(orderId);
     }
 
-    function getOrder(
-        bytes16 orderId
-    ) external view returns (Order memory) {
-        require(
-            orderMap[orderId].sender != address(0),
-            "invalid order id"
-        );
+    function getOrder(bytes16 orderId) external view returns (Order memory) {
+        require(orderMap[orderId].sender != address(0), "invalid order id");
         return orderMap[orderId];
     }
 
