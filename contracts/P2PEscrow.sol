@@ -10,25 +10,25 @@ contract P2PEscrow {
     using SafeERC20 for IERC20;
 
     // Events emitted during the contract functions execution
-    event EscrowDeposit(bytes16 indexed transactionId);
+    event MarketOrderDeposit(bytes16 indexed orderId);
 
-    event RefundedTransaction(bytes16 indexed transactionId);
-    event CancelledOrder(bytes16 indexed transactionId);
+    event RefundedOrder(bytes16 indexed orderId);
+    event CancelledOrder(bytes16 indexed orderId);
 
     // End of Events
 
     // errors
-    error DepositFailure(DepositFailureReason reason);
+    error MarketOrderFailure(MarketOrderFailureReason reason);
     error RefundFailure(RefundFailureReason reason);
     error CacncelOrderFailure(CancelOrderFailureReason reason);
 
-    enum TransactionStatus {
+    enum OrderStatus {
         AWAITING_DELIVERY,
         SUCCESS,
         REFUNDED,
         CANCELLED
     }
-    enum DepositFailureReason {
+    enum MarketOrderFailureReason {
         INVALID_STATE,
         INSUFFICIENT_BALANCE
     }
@@ -41,23 +41,23 @@ contract P2PEscrow {
         INVALID_STATE
     }
 
-    struct Transaction {
+    struct Order {
         address sender;
         uint96 swapTokenAmount;
         uint96 tokenAmount;
         uint32 timeoutTime;
         uint16 tokenId;
         uint16 swapTokenId;
-        TransactionStatus status;
+        OrderStatus status;
     }
 
-    uint32 public transactionTimeoutDuration;
-    mapping(bytes16 => Transaction) transactionMap;
+    uint32 public orderTimeoutDuration;
+    mapping(bytes16 => Order) orderMap;
     address[] tokens;
 
     constructor(address[] memory _tokens) {
         // Set default maturityTime period
-        transactionTimeoutDuration = 100000;
+        orderTimeoutDuration = 100000;
         tokens = _tokens;
     }
 
@@ -82,109 +82,109 @@ contract P2PEscrow {
     }
 
     function setTransactionTimeout(uint32 timeoutDuration) external {
-        transactionTimeoutDuration = timeoutDuration;
+        orderTimeoutDuration = timeoutDuration;
     }
 
-    function deposit(
+    function marketOrder(
         uint16 tokenId,
         uint96 tokenAmount,
         uint16 swapTokenId,
         uint96 swapTokenTokenAmount,
-        bytes16 transactionId
+        bytes16 orderId
     ) external returns (bytes16) {
         require(tokenId < tokensLength(), "invalid tokenId");
         require(swapTokenId < tokensLength(), "invalid swap token id");
 
-        if (transactionMap[transactionId].sender == address(0)) {
+        if (orderMap[orderId].sender == address(0)) {
             _pullTokens(msg.sender, tokens[tokenId], tokenAmount);
 
-            transactionMap[transactionId].sender = msg.sender;
-            transactionMap[transactionId].tokenId = tokenId;
-            transactionMap[transactionId].swapTokenId = swapTokenId;
-            transactionMap[transactionId].tokenAmount = tokenAmount;
-            transactionMap[transactionId]
+            orderMap[orderId].sender = msg.sender;
+            orderMap[orderId].tokenId = tokenId;
+            orderMap[orderId].swapTokenId = swapTokenId;
+            orderMap[orderId].tokenAmount = tokenAmount;
+            orderMap[orderId]
                 .swapTokenAmount = swapTokenTokenAmount;
-            transactionMap[transactionId].timeoutTime =
+            orderMap[orderId].timeoutTime =
                 uint32(block.timestamp) +
-                transactionTimeoutDuration;
-            transactionMap[transactionId].status = TransactionStatus
+                orderTimeoutDuration;
+            orderMap[orderId].status = OrderStatus
                 .AWAITING_DELIVERY;
 
-            emit EscrowDeposit(transactionId);
-            return transactionId;
+            emit MarketOrderDeposit(orderId);
+            return orderId;
         }
 
         if (
-            transactionMap[transactionId].status !=
-            TransactionStatus.AWAITING_DELIVERY
-        ) revert DepositFailure(DepositFailureReason.INVALID_STATE);
+            orderMap[orderId].status !=
+            OrderStatus.AWAITING_DELIVERY
+        ) revert MarketOrderFailure(MarketOrderFailureReason.INVALID_STATE);
 
         address swapToken = tokens[swapTokenId];
         uint256 swapTokenBalance = IERC20(swapToken).balanceOf(address(this));
         if (swapTokenBalance < swapTokenTokenAmount)
-            revert DepositFailure(DepositFailureReason.INSUFFICIENT_BALANCE);
+            revert MarketOrderFailure(MarketOrderFailureReason.INSUFFICIENT_BALANCE);
         _pushTokens(msg.sender, swapToken, swapTokenTokenAmount);
 
-        if (transactionMap[transactionId].swapTokenAmount != tokenAmount)
-            revert DepositFailure(DepositFailureReason.INSUFFICIENT_BALANCE);
+        if (orderMap[orderId].swapTokenAmount != tokenAmount)
+            revert MarketOrderFailure(MarketOrderFailureReason.INSUFFICIENT_BALANCE);
         _sendTokens(
             msg.sender,
-            transactionMap[transactionId].sender,
+            orderMap[orderId].sender,
             tokens[tokenId],
             tokenAmount
         );
 
-        transactionMap[transactionId].status = TransactionStatus.SUCCESS;
+        orderMap[orderId].status = OrderStatus.SUCCESS;
 
-        return transactionId;
+        return orderId;
     }
 
-    function cancelOrder(bytes16 transactionId) external {
-        Transaction memory transaction = transactionMap[transactionId];
-        if (msg.sender != transaction.sender)
+    function cancelOrder(bytes16 orderId) external {
+        Order memory order = orderMap[orderId];
+        if (msg.sender != order.sender)
             revert CacncelOrderFailure(
                 CancelOrderFailureReason.ONLY_ORDER_CREATOR_CANCEL
             );
-        if (transaction.status != TransactionStatus.AWAITING_DELIVERY)
+        if (order.status != OrderStatus.AWAITING_DELIVERY)
             revert CacncelOrderFailure(CancelOrderFailureReason.INVALID_STATE);
 
         _pushTokens(
-            transaction.sender,
-            tokens[transaction.tokenId],
-            transaction.tokenAmount
+            order.sender,
+            tokens[order.tokenId],
+            order.tokenAmount
         );
 
-        transactionMap[transactionId].status = TransactionStatus.CANCELLED;
+        orderMap[orderId].status = OrderStatus.CANCELLED;
 
-        emit CancelledOrder(transactionId);
+        emit CancelledOrder(orderId);
     }
 
-    function refund(bytes16 transactionId) external {
-        Transaction memory transaction = transactionMap[transactionId];
-        if (block.timestamp <= transaction.timeoutTime)
+    function refund(bytes16 orderId) external {
+        Order memory order = orderMap[orderId];
+        if (block.timestamp <= order.timeoutTime)
             revert RefundFailure(RefundFailureReason.REFUND_ONLY_AFTER_TIMEOUT);
-        if (transaction.status != TransactionStatus.AWAITING_DELIVERY)
+        if (order.status != OrderStatus.AWAITING_DELIVERY)
             revert RefundFailure(RefundFailureReason.INVALID_STATE);
 
         _pushTokens(
-            transaction.sender,
-            tokens[transaction.tokenId],
-            transaction.tokenAmount
+            order.sender,
+            tokens[order.tokenId],
+            order.tokenAmount
         );
 
-        transactionMap[transactionId].status = TransactionStatus.REFUNDED;
+        orderMap[orderId].status = OrderStatus.REFUNDED;
 
-        emit RefundedTransaction(transactionId);
+        emit RefundedOrder(orderId);
     }
 
-    function getTransaction(
-        bytes16 transactionId
-    ) external view returns (Transaction memory) {
+    function getOrder(
+        bytes16 orderId
+    ) external view returns (Order memory) {
         require(
-            transactionMap[transactionId].sender != address(0),
-            "invalid transaction id"
+            orderMap[orderId].sender != address(0),
+            "invalid order id"
         );
-        return transactionMap[transactionId];
+        return orderMap[orderId];
     }
 
     function getTokenIndex(address token) public view returns (int) {
