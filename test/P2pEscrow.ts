@@ -4,13 +4,20 @@ import { toUtf8Bytes } from "ethers/lib/utils";
 import { ethers } from "hardhat";
 import { HashZero } from "@ethersproject/constants";
 import { arrayify, BytesLike, concat, hexlify } from "@ethersproject/bytes";
+import { SimpleToken } from "../typechain-types";
+import { Wallet } from "ethers";
 
 describe("P2PEscrow", function () {
-  async function deployP2PEscrow() {
+  async function setup() {
+    const totalTokensNum = 1000;
+    const tokens: string[] = []
+    for (let index = 0; index < totalTokensNum; index++) {
+        tokens.push(Wallet.createRandom().address);
+    }
     // Contracts are deployed using the first signer/account by default
     const [owner, otherAccount] = await ethers.getSigners();
     const P2PEscrow = await ethers.getContractFactory("P2PEscrow");
-    const p2pEscrow = await P2PEscrow.deploy();
+    const p2pEscrow = await P2PEscrow.deploy(tokens);
 
     const SendSimpleToken = await ethers.getContractFactory("SimpleToken");
     const sendSimpleToken = await SendSimpleToken.deploy(
@@ -26,12 +33,8 @@ describe("P2PEscrow", function () {
 
     await p2pEscrow.addToken(sendSimpleToken.address);
     await p2pEscrow.addToken(receiveSimpleToken.address);
-    const sendSimpleTokenId = await p2pEscrow.getTokenIndex(
-      sendSimpleToken.address
-    );
-    const receiveSimpleTokenId = await p2pEscrow.getTokenIndex(
-      receiveSimpleToken.address
-    );
+    const sendSimpleTokenId = totalTokensNum + 0;
+    const receiveSimpleTokenId = totalTokensNum + 1;
     return {
       p2pEscrow,
       owner,
@@ -43,6 +46,17 @@ describe("P2PEscrow", function () {
     };
   }
 
+  async function deployAndGetToken(name: string, symbol: string): Promise<SimpleToken> {
+    const SimpleToken = await ethers.getContractFactory("SimpleToken");
+    const deployedToken = await SimpleToken.deploy(name, symbol, "10000000000000000000000");
+    return deployedToken;
+  }
+
+  async function deployP2pEscrow(tokens: string[]) {
+    const P2PEscrow = await ethers.getContractFactory("P2PEscrow");
+    const p2pEscrow = await P2PEscrow.deploy(tokens);
+    return p2pEscrow;
+  }
   function bytes16(str: string): string {
     const bytes = toUtf8Bytes(str);
     return hexlify(concat([bytes, HashZero]).slice(0, 16));
@@ -59,7 +73,7 @@ describe("P2PEscrow", function () {
         sendSimpleToken,
         otherAccount,
         receiveSimpleToken,
-      } = await loadFixture(deployP2PEscrow);
+      } = await loadFixture(setup);
       await expect(p2pEscrow.getTransaction(bytes16("1"))).to.be.reverted;
     });
 
@@ -72,7 +86,7 @@ describe("P2PEscrow", function () {
         otherAccount,
         receiveSimpleToken,
         receiveSimpleTokenId,
-      } = await loadFixture(deployP2PEscrow);
+      } = await loadFixture(setup);
       const sendTokenId = sendSimpleTokenId;
       const sendAmount = 1000000;
       const receiveTokenId = receiveSimpleTokenId;
@@ -106,7 +120,7 @@ describe("P2PEscrow", function () {
         otherAccount,
         receiveSimpleToken,
         receiveSimpleTokenId,
-      } = await loadFixture(deployP2PEscrow);
+      } = await loadFixture(setup);
 
       const receiverAddress = otherAccount.address;
       const transactionId = bytes16("1");
@@ -186,7 +200,7 @@ describe("P2PEscrow", function () {
         otherAccount,
         receiveSimpleToken,
         receiveSimpleTokenId,
-      } = await loadFixture(deployP2PEscrow);
+      } = await loadFixture(setup);
       const receiverAddress = otherAccount.address;
       const transactionId = bytes16("1");
       await p2pEscrow.setTransactionTimeout(0);
@@ -225,7 +239,7 @@ describe("P2PEscrow", function () {
         otherAccount,
         receiveSimpleToken,
         receiveSimpleTokenId,
-      } = await loadFixture(deployP2PEscrow);
+      } = await loadFixture(setup);
       const receiverAddress = otherAccount.address;
       const transactionId = bytes16("1");
       await p2pEscrow.setTransactionTimeout(0);
@@ -264,7 +278,7 @@ describe("P2PEscrow", function () {
         otherAccount,
         receiveSimpleToken,
         receiveSimpleTokenId,
-      } = await loadFixture(deployP2PEscrow);
+      } = await loadFixture(setup);
       const receiverAddress = otherAccount.address;
       const transactionId = bytes16("1");
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT);
@@ -296,7 +310,7 @@ describe("P2PEscrow", function () {
         otherAccount,
         receiveSimpleToken,
         receiveSimpleTokenId,
-      } = await loadFixture(deployP2PEscrow);
+      } = await loadFixture(setup);
       const receiverAddress = otherAccount.address;
       const transactionId = bytes16("1");
       await p2pEscrow.setTransactionTimeout(0);
@@ -342,7 +356,7 @@ describe("P2PEscrow", function () {
         sendSimpleToken,
         sendSimpleTokenId,
         receiveSimpleTokenId,
-      } = await loadFixture(deployP2PEscrow);
+      } = await loadFixture(setup);
       const transactionId = bytes16("1");
       const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
         owner.address
@@ -382,7 +396,7 @@ describe("P2PEscrow", function () {
         otherAccount,
         receiveSimpleToken,
         receiveSimpleTokenId,
-      } = await loadFixture(deployP2PEscrow);
+      } = await loadFixture(setup);
       const receiverAddress = otherAccount.address;
       const transactionId = bytes16("1");
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT);
@@ -420,7 +434,7 @@ describe("P2PEscrow", function () {
         otherAccount,
         receiveSimpleToken,
         receiveSimpleTokenId,
-      } = await loadFixture(deployP2PEscrow);
+      } = await loadFixture(setup);
       const receiverAddress = otherAccount.address;
       const transactionId = bytes16("1");
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT);
@@ -459,7 +473,7 @@ describe("P2PEscrow", function () {
         otherAccount,
         receiveSimpleToken,
         receiveSimpleTokenId,
-      } = await loadFixture(deployP2PEscrow);
+      } = await loadFixture(setup);
       const receiverAddress = otherAccount.address;
       const transactionId = bytes16("1");
       await p2pEscrow.setTransactionTimeout(0);
@@ -504,7 +518,7 @@ describe("P2PEscrow", function () {
           otherAccount,
           receiveSimpleToken,
           receiveSimpleTokenId,
-        } = await loadFixture(deployP2PEscrow);
+        } = await loadFixture(setup);
         const receiverAddress = otherAccount.address;
         const transactionId = bytes16("1");
         await p2pEscrow.setTransactionTimeout(0);
@@ -540,4 +554,30 @@ describe("P2PEscrow", function () {
         await expect(p2pEscrow.cancelOrder(transactionId)).to.be.reverted;
       });
   });
+
+  describe("Deploy P2PEscrow with 1000 tokens", function() {
+    it("Should add multiple tokens", async function () {
+        const totalTokensNum = 1000;
+        const tokens: string[] = []
+        for (let index = 0; index < totalTokensNum; index++) {
+            tokens.push(Wallet.createRandom().address);
+        }
+        const p2pEscrow = await deployP2pEscrow(tokens);
+
+    });
+  })
+
+  describe("Add 500 tokens", function() {
+    it("Should add multiple tokens", async function () {
+        const totalTokensNum = 500;
+        const tokens: string[] = []
+        for (let index = 0; index < totalTokensNum; index++) {
+            tokens.push(Wallet.createRandom().address);
+        }
+        const p2pEscrow = await deployP2pEscrow([]);
+
+        await p2pEscrow.addTokens(tokens);
+        
+    });
+  })
 });

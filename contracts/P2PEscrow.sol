@@ -55,9 +55,10 @@ contract P2PEscrow {
     mapping(bytes16 => Transaction) transactionMap;
     address[] tokens;
 
-    constructor() {
+    constructor(address[] memory _tokens) {
         // Set default maturityTime period
         transactionTimeoutDuration = 100000;
+        tokens = _tokens;
     }
 
     function _pullTokens(address user, address asset, uint256 amount) private {
@@ -194,10 +195,14 @@ contract P2PEscrow {
     }
 
     function addToken(address token) external returns (uint256) {
-        int tokenIndex = getTokenIndex(token);
-        if (tokenIndex != -1) return uint(tokenIndex);
         tokens.push(token);
         return tokens.length - 1;
+    }
+
+    function addTokens(address[] calldata _tokens) external {
+        for (uint i = 0; i < _tokens.length; i++) {
+            tokens.push(_tokens[i]);
+        }
     }
 
     function tokensLength() public view returns (uint) {
