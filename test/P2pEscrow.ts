@@ -26,8 +26,10 @@ describe("P2PEscrow", function () {
       otherAccount
     ).deploy("ReceiveSimple", "RSYM", "10000000000000000000000");
 
-    await p2pEscrow.addToken(sendSimpleToken.address);
-    await p2pEscrow.addToken(receiveSimpleToken.address);
+    await p2pEscrow.addTokens([
+      sendSimpleToken.address,
+      receiveSimpleToken.address,
+    ]);
     const sendSimpleTokenId = 0;
     const receiveSimpleTokenId = 1;
     return {
@@ -254,17 +256,7 @@ describe("P2PEscrow", function () {
       let balanceBeforeDeposit = await sendSimpleToken.balanceOf(owner.address);
 
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT);
-      console.log(
-        "gas estimate - user a deposits",
-        await p2pEscrow.estimateGas.limitOrder(
-          sendSimpleTokenId,
-          SEND_AMOUNT,
-          receiveSimpleTokenId,
-          RECEIVE_AMOUNT,
-          Math.round(new Date().getTime() / 1000) + 300,
-          orderId
-        )
-      );
+
       await p2pEscrow.limitOrder(
         sendSimpleTokenId,
         SEND_AMOUNT,
@@ -285,21 +277,13 @@ describe("P2PEscrow", function () {
       balanceBeforeDeposit = await receiveSimpleToken.balanceOf(
         otherAccount.address
       );
-      console.log(
-        "gas estimate - user b deposits",
-        await otherUserP2pEscrow.estimateGas.marketOrder(
-          receiveSimpleTokenId,
-          RECEIVE_AMOUNT,
-          sendSimpleTokenId,
-          SEND_AMOUNT,
-          orderId
-        )
-      );
-      await otherUserP2pEscrow.marketOrder(
+
+      await otherUserP2pEscrow.limitOrder(
         receiveSimpleTokenId,
         RECEIVE_AMOUNT,
         sendSimpleTokenId,
         SEND_AMOUNT,
+        Math.round(new Date().getTime() / 1000) + 300,
         orderId
       );
       balanceAfterDeposit = await receiveSimpleToken.balanceOf(
@@ -332,7 +316,7 @@ describe("P2PEscrow", function () {
       } = await loadFixture(setup);
       const receiverAddress = otherAccount.address;
       const orderId = bytes16("1");
-      await p2pEscrow.setTransactionTimeout(0);
+      await p2pEscrow.setOrderTimeout(0);
       const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
         owner.address
       );
@@ -371,7 +355,7 @@ describe("P2PEscrow", function () {
       } = await loadFixture(setup);
       const receiverAddress = otherAccount.address;
       const orderId = bytes16("1");
-      await p2pEscrow.setTransactionTimeout(0);
+      await p2pEscrow.setOrderTimeout(0);
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT);
       const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
         owner.address
@@ -442,7 +426,7 @@ describe("P2PEscrow", function () {
       } = await loadFixture(setup);
       const receiverAddress = otherAccount.address;
       const orderId = bytes16("1");
-      await p2pEscrow.setTransactionTimeout(0);
+      await p2pEscrow.setOrderTimeout(0);
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT * 2);
       const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
         owner.address
@@ -605,7 +589,7 @@ describe("P2PEscrow", function () {
       } = await loadFixture(setup);
       const receiverAddress = otherAccount.address;
       const orderId = bytes16("1");
-      await p2pEscrow.setTransactionTimeout(0);
+      await p2pEscrow.setOrderTimeout(0);
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT * 2);
       const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
         owner.address
@@ -650,7 +634,7 @@ describe("P2PEscrow", function () {
       } = await loadFixture(setup);
       const receiverAddress = otherAccount.address;
       const orderId = bytes16("1");
-      await p2pEscrow.setTransactionTimeout(0);
+      await p2pEscrow.setOrderTimeout(0);
       await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT * 2);
       const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
         owner.address
@@ -705,6 +689,34 @@ describe("P2PEscrow", function () {
       const p2pEscrow = await deployP2pEscrow([]);
 
       await p2pEscrow.addTokens(tokens);
+    });
+  });
+
+  describe("Only owner tests", function() {
+    it("only contract owner should be able to set the order timeout", async function(){
+      const {
+        p2pEscrow,
+        owner,
+        sendSimpleToken,
+        otherAccount,
+        receiveSimpleToken,
+      } = await loadFixture(setup);
+      await p2pEscrow.setOrderTimeout(600);
+
+      await expect(p2pEscrow.connect(otherAccount).setOrderTimeout(300)).to.be.reverted;
+    });
+    it("only contract owner should be able to add token", async function(){
+      const {
+        p2pEscrow,
+        owner,
+        sendSimpleToken,
+        otherAccount,
+        receiveSimpleToken,
+      } = await loadFixture(setup);
+      const tokens= [Wallet.createRandom().address];
+      await p2pEscrow.addTokens(tokens);
+
+      await expect(p2pEscrow.connect(otherAccount).addTokens(tokens)).to.be.reverted;
     });
   });
 });
