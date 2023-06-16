@@ -4,9 +4,10 @@ pragma solidity ^0.8.9;
 // Uncomment this line to use console.log
 // import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract P2PEscrow {
+contract P2PEscrow is Ownable {
     using SafeERC20 for IERC20;
 
     // Events emitted during the contract functions execution
@@ -64,7 +65,7 @@ contract P2PEscrow {
 
     constructor(address[] memory _tokens) {
         // Set default maturityTime period
-        orderTimeoutDuration = 100000;
+        orderTimeoutDuration = 300;
         tokens = _tokens;
     }
 
@@ -88,7 +89,7 @@ contract P2PEscrow {
         IERC20(asset).safeTransferFrom(sender, receiver, amount);
     }
 
-    function setTransactionTimeout(uint32 timeoutDuration) external {
+    function setOrderTimeout(uint32 timeoutDuration) public onlyOwner {
         orderTimeoutDuration = timeoutDuration;
     }
 
@@ -100,7 +101,7 @@ contract P2PEscrow {
         uint32 timeoutTime,
         bytes16 orderId,
         OrderType orderType
-    ) internal returns (bytes16) {
+    ) private returns (bytes16) {
         require(tokenId < tokensLength(), "invalid tokenId");
         require(swapTokenId < tokensLength(), "invalid swap token id");
 
@@ -156,7 +157,7 @@ contract P2PEscrow {
         uint16 swapTokenId,
         uint96 swapTokenTokenAmount,
         bytes16 orderId
-    ) external returns (bytes16) {
+    ) public returns (bytes16) {
         return
             executeOrder(
                 tokenId,
@@ -176,7 +177,7 @@ contract P2PEscrow {
         uint96 swapTokenTokenAmount,
         uint32 timeoutTime,
         bytes16 orderId
-    ) external returns (bytes16) {
+    ) public returns (bytes16) {
         return
             executeOrder(
                 tokenId,
@@ -189,7 +190,7 @@ contract P2PEscrow {
             );
     }
 
-    function cancelOrder(bytes16 orderId) external {
+    function cancelOrder(bytes16 orderId) public {
         Order memory order = orderMap[orderId];
         if (msg.sender != order.sender)
             revert CacncelOrderFailure(
@@ -205,7 +206,7 @@ contract P2PEscrow {
         emit CancelledOrder(orderId);
     }
 
-    function refund(bytes16 orderId) external {
+    function refund(bytes16 orderId) public {
         Order memory order = orderMap[orderId];
         if (block.timestamp <= order.timeoutTime)
             revert RefundFailure(RefundFailureReason.REFUND_ONLY_AFTER_TIMEOUT);
@@ -219,7 +220,7 @@ contract P2PEscrow {
         emit RefundedOrder(orderId);
     }
 
-    function getOrder(bytes16 orderId) external view returns (Order memory) {
+    function getOrder(bytes16 orderId) public view returns (Order memory) {
         require(orderMap[orderId].sender != address(0), "invalid order id");
         return orderMap[orderId];
     }
@@ -231,12 +232,7 @@ contract P2PEscrow {
         return -1;
     }
 
-    function addToken(address token) external returns (uint256) {
-        tokens.push(token);
-        return tokens.length - 1;
-    }
-
-    function addTokens(address[] calldata _tokens) external {
+    function addTokens(address[] calldata _tokens) public onlyOwner {
         for (uint i = 0; i < _tokens.length; i++) {
             tokens.push(_tokens[i]);
         }
