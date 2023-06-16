@@ -15,7 +15,7 @@ contract P2PEscrow is Ownable {
 
     // Events emitted during the contract functions execution
     event OrderDeposit(bytes16 indexed orderId);
-
+    event OrderSuccessful(bytes16 indexed orderId);
     event RefundedOrder(bytes16 indexed orderId);
     event CancelledOrder(bytes16 indexed orderId);
 
@@ -174,7 +174,7 @@ contract P2PEscrow is Ownable {
         );
 
         orderMap[orderId].status = OrderStatus.SUCCESS;
-
+        emit OrderSuccessful(orderId);
         return orderId;
     }
 
