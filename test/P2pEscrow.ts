@@ -6,6 +6,7 @@ import { HashZero } from "@ethersproject/constants";
 import { arrayify, BytesLike, concat, hexlify } from "@ethersproject/bytes";
 import { SimpleToken } from "../typechain-types";
 import { Wallet } from "ethers";
+import { setTimeout } from "timers/promises";
 
 describe("P2PEscrow", function () {
   async function setup() {
@@ -415,6 +416,7 @@ describe("P2PEscrow", function () {
       let balanceAfterDeposit = await sendSimpleToken.balanceOf(owner.address);
       expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(SEND_AMOUNT);
 
+      await setTimeout(2000); // Wait for 2 seconds to ensure reproducing the testing scenario.
       const otherUserP2pEscrow = p2pEscrow.connect(otherAccount);
       await receiveSimpleToken
         .connect(otherAccount)
