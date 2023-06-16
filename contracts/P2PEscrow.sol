@@ -5,6 +5,11 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+/**
+ * @title P2PEscrow
+ * @author Vamsi Krishna Srungarapu
+ * @notice Smart Contract aiding two users to swap tokens while acting as an escrow
+ */
 contract P2PEscrow is Ownable {
     using SafeERC20 for IERC20;
 
@@ -92,6 +97,24 @@ contract P2PEscrow is Ownable {
         orderTimeoutDuration = timeoutDuration;
     }
 
+    /**
+     * @notice executes a market order or limit order
+     * @dev execute a market order or a limit order. A user who wants to
+     * trade in and a user who wants to trade out should use the same order id.
+     * A valid combination can be as below:
+     * User 1 --> (tokenId: 1, tokenAmount: 1_000_000, swapTokenId: 2, swapTokenAmount: 2_000_000, timeoutTime: 1686927958, orderId: o1, orderType: 0)
+     * User 2 --> (tokenId: 2, tokenAmount: 2_000_000, swapTokenId: 1, swapTokenAmount: 1_000_000, timeoutTime: 1686927958, orderId: o1, orderType: 0)
+     * Now, when user 1 executes the order, tokenId:1 amount is deposited into the escrow amount.
+     * Later when user 2 executes the order before the timeoutTime: 1686927958, 
+     *  tokenId:1 amount is moved from escrow to user and tokenId: 2 amount is moved from user 2 to user 1
+     * @param tokenId id of the token that user wants to trade in
+     * @param tokenAmount amount of token user wants to trade in
+     * @param swapTokenId id of the token that a user wants to trade out
+     * @param swapTokenAmount amount of token user wants to trade out
+     * @param timeoutTime expiry time of the order
+     * @param orderId unique order id
+     * @param orderType can be market order or limit order
+     */
     function executeOrder(
         uint16 tokenId,
         uint96 tokenAmount,
@@ -155,11 +178,20 @@ contract P2PEscrow is Ownable {
         return orderId;
     }
 
+    /**
+     * @notice executes a market order
+     * @dev see executeOrder comments. this function is just a wrapper on top of executeOrder
+     * @param tokenId id of the token that user wants to trade in
+     * @param tokenAmount amount of token user wants to trade in
+     * @param swapTokenId id of the token that a user wants to trade out
+     * @param swapTokenAmount amount of token user wants to trade out
+     * @param orderId unique order id
+     */
     function marketOrder(
         uint16 tokenId,
         uint96 tokenAmount,
         uint16 swapTokenId,
-        uint96 swapTokenTokenAmount,
+        uint96 swapTokenAmount,
         bytes16 orderId
     ) public returns (bytes16) {
         return
@@ -167,18 +199,28 @@ contract P2PEscrow is Ownable {
                 tokenId,
                 tokenAmount,
                 swapTokenId,
-                swapTokenTokenAmount,
+                swapTokenAmount,
                 uint32(block.timestamp + orderTimeoutDuration),
                 orderId,
                 OrderType.MARKET_ORDER
             );
     }
 
+    /**
+     * @notice executes a limit order
+     * @dev see executeOrder comments. this function is just a wrapper on top of executeOrder
+     * @param tokenId id of the token that user wants to trade in
+     * @param tokenAmount amount of token user wants to trade in
+     * @param swapTokenId id of the token that a user wants to trade out
+     * @param swapTokenAmount amount of token user wants to trade out
+     * @param timeoutTime expiry time of the order
+     * @param orderId unique order id
+     */
     function limitOrder(
         uint16 tokenId,
         uint96 tokenAmount,
         uint16 swapTokenId,
-        uint96 swapTokenTokenAmount,
+        uint96 swapTokenAmount,
         uint32 timeoutTime,
         bytes16 orderId
     ) public returns (bytes16) {
@@ -187,13 +229,18 @@ contract P2PEscrow is Ownable {
                 tokenId,
                 tokenAmount,
                 swapTokenId,
-                swapTokenTokenAmount,
+                swapTokenAmount,
                 timeoutTime,
                 orderId,
                 OrderType.LIMIT_ORDER
             );
     }
 
+    /**
+     * @notice Cancel a waiting order
+     * @dev a user who created the order first with the given order id can only cancel the order
+     * @param orderId order id that has to be cancelled
+     */
     function cancelOrder(bytes16 orderId) public {
         Order memory order = orderMap[orderId];
         if (msg.sender != order.sender)
@@ -210,6 +257,11 @@ contract P2PEscrow is Ownable {
         emit CancelledOrder(orderId);
     }
 
+    /**
+     * @notice Refund an expired waiting delivery order
+     * @dev an order can be refuncded only if it is expired and is in waiting delivery state
+     * @param orderId order id that has to be refunded
+     */
     function refund(bytes16 orderId) public {
         Order memory order = orderMap[orderId];
         if (block.timestamp <= order.timeoutTime)
