@@ -11,8 +11,7 @@ contract P2PEscrow is Ownable {
     using SafeERC20 for IERC20;
 
     // Events emitted during the contract functions execution
-    event MarketOrderDeposit(bytes16 indexed orderId);
-    event LimitOrderDeposit(bytes16 indexed orderId);
+    event OrderDeposit(bytes16 indexed orderId);
 
     event RefundedOrder(bytes16 indexed orderId);
     event CancelledOrder(bytes16 indexed orderId);
@@ -20,7 +19,7 @@ contract P2PEscrow is Ownable {
     // End of Events
 
     // errors
-    error MarketOrderFailure(MarketOrderFailureReason reason);
+    error OrderFailure(OrderFailureReason reason);
     error RefundFailure(RefundFailureReason reason);
     error CacncelOrderFailure(CancelOrderFailureReason reason);
 
@@ -35,9 +34,11 @@ contract P2PEscrow is Ownable {
         REFUNDED,
         CANCELLED
     }
-    enum MarketOrderFailureReason {
+    enum OrderFailureReason {
         INVALID_STATE,
-        INSUFFICIENT_BALANCE
+        INSUFFICIENT_BALANCE,
+        DUPLICATE_ORDER,
+        INVALID_ORDER_DETAILS
     }
     enum RefundFailureReason {
         REFUND_ONLY_AFTER_TIMEOUT,
@@ -97,13 +98,16 @@ contract P2PEscrow is Ownable {
         uint16 tokenId,
         uint96 tokenAmount,
         uint16 swapTokenId,
-        uint96 swapTokenTokenAmount,
+        uint96 swapTokenAmount,
         uint32 timeoutTime,
         bytes16 orderId,
         OrderType orderType
     ) private returns (bytes16) {
         require(tokenId < tokensLength(), "invalid tokenId");
         require(swapTokenId < tokensLength(), "invalid swap token id");
+
+        if (orderMap[orderId].sender == msg.sender)
+            revert OrderFailure(OrderFailureReason.DUPLICATE_ORDER);
 
         if (orderMap[orderId].sender == address(0)) {
             _pullTokens(msg.sender, tokens[tokenId], tokenAmount);
@@ -112,33 +116,35 @@ contract P2PEscrow is Ownable {
             orderMap[orderId].tokenId = tokenId;
             orderMap[orderId].swapTokenId = swapTokenId;
             orderMap[orderId].tokenAmount = tokenAmount;
-            orderMap[orderId].swapTokenAmount = swapTokenTokenAmount;
+            orderMap[orderId].swapTokenAmount = swapTokenAmount;
             orderMap[orderId].timeoutTime = timeoutTime;
             orderMap[orderId].status = OrderStatus.AWAITING_DELIVERY;
             orderMap[orderId].orderType = orderType;
 
-            if (orderType == OrderType.MARKET_ORDER)
-                emit MarketOrderDeposit(orderId);
-            else emit LimitOrderDeposit(orderId);
-
+            emit OrderDeposit(orderId);
             return orderId;
         }
 
         if (orderMap[orderId].status != OrderStatus.AWAITING_DELIVERY)
-            revert MarketOrderFailure(MarketOrderFailureReason.INVALID_STATE);
+            revert OrderFailure(OrderFailureReason.INVALID_STATE);
+        if (block.timestamp > orderMap[orderId].timeoutTime)
+            revert OrderFailure(OrderFailureReason.INVALID_STATE);
+        if (
+            orderMap[orderId].tokenId != swapTokenId ||
+            orderMap[orderId].tokenAmount != swapTokenAmount ||
+            orderMap[orderId].swapTokenId != tokenId ||
+            orderMap[orderId].tokenAmount != tokenAmount ||
+            orderMap[orderId].orderType != orderType
+        ) revert OrderFailure(OrderFailureReason.INVALID_ORDER_DETAILS);
 
         address swapToken = tokens[swapTokenId];
         uint256 swapTokenBalance = IERC20(swapToken).balanceOf(address(this));
-        if (swapTokenBalance < swapTokenTokenAmount)
-            revert MarketOrderFailure(
-                MarketOrderFailureReason.INSUFFICIENT_BALANCE
-            );
-        _pushTokens(msg.sender, swapToken, swapTokenTokenAmount);
+        if (swapTokenBalance < swapTokenAmount)
+            revert OrderFailure(OrderFailureReason.INSUFFICIENT_BALANCE);
+        _pushTokens(msg.sender, swapToken, swapTokenAmount);
 
         if (orderMap[orderId].swapTokenAmount != tokenAmount)
-            revert MarketOrderFailure(
-                MarketOrderFailureReason.INSUFFICIENT_BALANCE
-            );
+            revert OrderFailure(OrderFailureReason.INSUFFICIENT_BALANCE);
         _sendTokens(
             msg.sender,
             orderMap[orderId].sender,
