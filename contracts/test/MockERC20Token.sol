@@ -16,10 +16,10 @@ contract MockERC20Token is ERC20 {
      * @dev Constructor that gives msg.sender all of existing tokens.
      */
     constructor(
-        string memory name,
-        string memory symbol,
+        string memory tokenName,
+        string memory tokenSymbol,
         uint256 initialSupply
-    )  ERC20(name, symbol) {
+    )  ERC20(tokenName, tokenSymbol) {
         _mint(msg.sender, initialSupply);
     }
 }
