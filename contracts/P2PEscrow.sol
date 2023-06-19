@@ -93,7 +93,7 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
         IERC20(asset).safeTransferFrom(sender, receiver, amount);
     }
 
-    function setOrderTimeout(uint32 timeoutDuration) public onlyOwner {
+    function setOrderTimeout(uint32 timeoutDuration) external onlyOwner {
         orderTimeoutDuration = timeoutDuration;
     }
 
@@ -190,7 +190,7 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
         uint16 swapTokenId,
         uint96 swapTokenAmount,
         bytes16 orderId
-    ) public returns (bytes16) {
+    ) external returns (bytes16) {
         return
             executeOrder(
                 tokenId,
@@ -220,7 +220,7 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
         uint96 swapTokenAmount,
         uint32 timeoutTime,
         bytes16 orderId
-    ) public returns (bytes16) {
+    ) external returns (bytes16) {
         return
             executeOrder(
                 tokenId,
@@ -238,7 +238,7 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
      * @dev a user who created the order first with the given order id can only cancel the order
      * @param orderId order id that has to be cancelled
      */
-    function cancelOrder(bytes16 orderId) public {
+    function cancelOrder(bytes16 orderId) external {
         Order memory order = orderMap[orderId];
         if (msg.sender != order.sender)
             revert CacncelOrderFailure(
@@ -259,7 +259,7 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
      * @dev an order can be refuncded only if it is expired and is in waiting delivery state
      * @param orderId order id that has to be refunded
      */
-    function refund(bytes16 orderId) public {
+    function refund(bytes16 orderId) external {
         Order memory order = orderMap[orderId];
         if (block.timestamp <= order.timeoutTime)
             revert RefundFailure(RefundFailureReason.REFUND_ONLY_AFTER_TIMEOUT);
@@ -273,19 +273,19 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
 
     }
 
-    function getOrder(bytes16 orderId) public view returns (Order memory) {
+    function getOrder(bytes16 orderId) external view returns (Order memory) {
         require(orderMap[orderId].sender != address(0), "invalid order id");
         return orderMap[orderId];
     }
 
-    function getTokenIndex(address token) public view returns (int) {
+    function getTokenIndex(address token) external view returns (int) {
         for (uint i = 0; i < tokens.length; i++) {
             if (tokens[i] == token) return int(i);
         }
         return -1;
     }
 
-    function addTokens(address[] calldata inputTokens) public onlyOwner {
+    function addTokens(address[] calldata inputTokens) external onlyOwner {
         for (uint i = 0; i < inputTokens.length; i++) {
             tokens.push(inputTokens[i]);
         }
