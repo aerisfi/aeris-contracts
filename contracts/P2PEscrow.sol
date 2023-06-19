@@ -4,13 +4,13 @@ pragma solidity ^0.8.9;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
+import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 /**
  * @title P2PEscrow
  * @author Vamsi Krishna Srungarapu
  * @notice Smart Contract aiding two users to swap tokens while acting as an escrow
  */
-contract P2PEscrow is Ownable {
+contract P2PEscrow is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // Events emitted during the contract functions execution
@@ -123,7 +123,7 @@ contract P2PEscrow is Ownable {
         uint32 timeoutTime,
         bytes16 orderId,
         OrderType orderType
-    ) private returns (bytes16) {
+    ) private nonReentrant returns (bytes16) {
         require(tokenId < tokensLength(), "invalid tokenId");
         require(swapTokenId < tokensLength(), "invalid swap token id");
 
@@ -131,7 +131,6 @@ contract P2PEscrow is Ownable {
             revert OrderFailure(OrderFailureReason.DUPLICATE_ORDER);
 
         if (orderMap[orderId].sender == address(0)) {
-            _pullTokens(msg.sender, tokens[tokenId], tokenAmount);
 
             orderMap[orderId].sender = msg.sender;
             orderMap[orderId].tokenId = tokenId;
@@ -143,6 +142,8 @@ contract P2PEscrow is Ownable {
             orderMap[orderId].orderType = orderType;
 
             emit OrderDeposit(orderId);
+            _pullTokens(msg.sender, tokens[tokenId], tokenAmount);
+
             return orderId;
         }
 
@@ -157,6 +158,9 @@ contract P2PEscrow is Ownable {
             orderMap[orderId].tokenAmount != tokenAmount ||
             orderMap[orderId].orderType != orderType
         ) revert OrderFailure(OrderFailureReason.INVALID_ORDER_DETAILS);
+
+        orderMap[orderId].status = OrderStatus.SUCCESS;
+        emit OrderSuccessful(orderId);
 
         address swapToken = tokens[swapTokenId];
         uint256 swapTokenBalance = IERC20(swapToken).balanceOf(address(this));
@@ -173,8 +177,6 @@ contract P2PEscrow is Ownable {
             tokenAmount
         );
 
-        orderMap[orderId].status = OrderStatus.SUCCESS;
-        emit OrderSuccessful(orderId);
         return orderId;
     }
 
@@ -250,11 +252,11 @@ contract P2PEscrow is Ownable {
         if (order.status != OrderStatus.AWAITING_DELIVERY)
             revert CacncelOrderFailure(CancelOrderFailureReason.INVALID_STATE);
 
+        orderMap[orderId].status = OrderStatus.CANCELLED;
+        emit CancelledOrder(orderId);
+
         _pushTokens(order.sender, tokens[order.tokenId], order.tokenAmount);
 
-        orderMap[orderId].status = OrderStatus.CANCELLED;
-
-        emit CancelledOrder(orderId);
     }
 
     /**
@@ -269,11 +271,11 @@ contract P2PEscrow is Ownable {
         if (order.status != OrderStatus.AWAITING_DELIVERY)
             revert RefundFailure(RefundFailureReason.INVALID_STATE);
 
+        orderMap[orderId].status = OrderStatus.REFUNDED;
+        emit RefundedOrder(orderId);
+
         _pushTokens(order.sender, tokens[order.tokenId], order.tokenAmount);
 
-        orderMap[orderId].status = OrderStatus.REFUNDED;
-
-        emit RefundedOrder(orderId);
     }
 
     function getOrder(bytes16 orderId) public view returns (Order memory) {
