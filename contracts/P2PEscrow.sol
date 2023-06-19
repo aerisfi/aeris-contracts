@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.9;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -290,9 +290,9 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
         return -1;
     }
 
-    function addTokens(address[] calldata _tokens) public onlyOwner {
-        for (uint i = 0; i < _tokens.length; i++) {
-            tokens.push(_tokens[i]);
+    function addTokens(address[] calldata inputTokens) public onlyOwner {
+        for (uint i = 0; i < inputTokens.length; i++) {
+            tokens.push(inputTokens[i]);
         }
     }
 
