@@ -24,7 +24,7 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
     // errors
     error OrderFailure(OrderFailureReason reason);
     error RefundFailure(RefundFailureReason reason);
-    error CacncelOrderFailure(CancelOrderFailureReason reason);
+    error CancelOrderFailure(CancelOrderFailureReason reason);
 
     enum OrderType {
         MARKET_ORDER,
@@ -241,11 +241,11 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
     function cancelOrder(bytes16 orderId) external {
         Order memory order = orderMap[orderId];
         if (msg.sender != order.sender)
-            revert CacncelOrderFailure(
+            revert CancelOrderFailure(
                 CancelOrderFailureReason.ONLY_ORDER_CREATOR_CANCEL
             );
         if (order.status != OrderStatus.AWAITING_DELIVERY)
-            revert CacncelOrderFailure(CancelOrderFailureReason.INVALID_STATE);
+            revert CancelOrderFailure(CancelOrderFailureReason.INVALID_STATE);
 
         orderMap[orderId].status = OrderStatus.CANCELLED;
         emit CancelledOrder(orderId);
@@ -256,7 +256,7 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
 
     /**
      * @notice Refund an expired waiting delivery order
-     * @dev an order can be refuncded only if it is expired and is in waiting delivery state
+     * @dev an order can be refunded only if it is expired and is in waiting delivery state
      * @param orderId order id that has to be refunded
      */
     function refund(bytes16 orderId) external {
