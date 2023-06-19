@@ -155,7 +155,7 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
             orderMap[orderId].tokenId != swapTokenId ||
             orderMap[orderId].tokenAmount != swapTokenAmount ||
             orderMap[orderId].swapTokenId != tokenId ||
-            orderMap[orderId].tokenAmount != tokenAmount ||
+            orderMap[orderId].swapTokenAmount != tokenAmount ||
             orderMap[orderId].orderType != orderType
         ) revert OrderFailure(OrderFailureReason.INVALID_ORDER_DETAILS);
 
@@ -163,13 +163,8 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
         emit OrderSuccessful(orderId);
 
         address swapToken = tokens[swapTokenId];
-        uint256 swapTokenBalance = IERC20(swapToken).balanceOf(address(this));
-        if (swapTokenBalance < swapTokenAmount)
-            revert OrderFailure(OrderFailureReason.INSUFFICIENT_BALANCE);
         _pushTokens(msg.sender, swapToken, swapTokenAmount);
 
-        if (orderMap[orderId].swapTokenAmount != tokenAmount)
-            revert OrderFailure(OrderFailureReason.INSUFFICIENT_BALANCE);
         _sendTokens(
             msg.sender,
             orderMap[orderId].sender,

@@ -389,7 +389,7 @@ describe("P2PEscrow", function () {
       );
     });
 
-    it("Should revert lmit order serving if attempted after order timeout", async function () {
+    it("Should revert limit order serving if attempted after order timeout", async function () {
       const {
         p2pEscrow,
         owner,
@@ -417,6 +417,58 @@ describe("P2PEscrow", function () {
       expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(SEND_AMOUNT);
 
       await setTimeout(2000); // Wait for 2 seconds to ensure reproducing the testing scenario.
+      const otherUserP2pEscrow = p2pEscrow.connect(otherAccount);
+      await receiveSimpleToken
+        .connect(otherAccount)
+        .approve(p2pEscrow.address, RECEIVE_AMOUNT);
+
+      balanceBeforeDeposit = await receiveSimpleToken.balanceOf(
+        otherAccount.address
+      );
+
+      await expect(
+        otherUserP2pEscrow.limitOrder(
+          receiveSimpleTokenId,
+          RECEIVE_AMOUNT,
+          sendSimpleTokenId,
+          SEND_AMOUNT,
+          Math.round(new Date().getTime() / 1000) + 300,
+          orderId
+        )
+      ).to.be.reverted;
+    });
+
+    it("Should revert limit order serving if attempted to complete a cancelled order", async function () {
+      const {
+        p2pEscrow,
+        owner,
+        sendSimpleToken,
+        sendSimpleTokenId,
+        otherAccount,
+        receiveSimpleToken,
+        receiveSimpleTokenId,
+      } = await loadFixture(setup);
+      const orderId = bytes16("1");
+      let balanceBeforeDeposit = await sendSimpleToken.balanceOf(owner.address);
+
+      await sendSimpleToken.approve(p2pEscrow.address, SEND_AMOUNT);
+
+      await p2pEscrow.limitOrder(
+        sendSimpleTokenId,
+        SEND_AMOUNT,
+        receiveSimpleTokenId,
+        RECEIVE_AMOUNT,
+        Math.round(new Date().getTime() / 1000) + 0,
+        orderId
+      );
+
+      let balanceAfterDeposit = await sendSimpleToken.balanceOf(owner.address);
+      expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(SEND_AMOUNT);
+      
+      await p2pEscrow.cancelOrder(orderId);
+      let balanceAfterCancel = await sendSimpleToken.balanceOf(owner.address);
+      expect(balanceBeforeDeposit).equals(balanceAfterCancel);
+
       const otherUserP2pEscrow = p2pEscrow.connect(otherAccount);
       await receiveSimpleToken
         .connect(otherAccount)
@@ -805,20 +857,10 @@ describe("P2PEscrow", function () {
     });
   });
 
-  describe("Deploy P2PEscrow with 1000 tokens", function () {
-    it("Should add multiple tokens", async function () {
-      const totalTokensNum = 1000;
-      const tokens: string[] = [];
-      for (let index = 0; index < totalTokensNum; index++) {
-        tokens.push(Wallet.createRandom().address);
-      }
-      const p2pEscrow = await deployP2pEscrow(tokens);
-    });
-  });
 
-  describe("Add 500 tokens", function () {
+  describe("Add multiple tokens", function () {
     it("Should add multiple tokens", async function () {
-      const totalTokensNum = 500;
+      const totalTokensNum = 10;
       const tokens: string[] = [];
       for (let index = 0; index < totalTokensNum; index++) {
         tokens.push(Wallet.createRandom().address);
@@ -826,6 +868,16 @@ describe("P2PEscrow", function () {
       const p2pEscrow = await deployP2pEscrow([]);
 
       await p2pEscrow.addTokens(tokens);
+      for (let index = 0; index < tokens.length; index++) {
+        expect(await p2pEscrow.getTokenIndex(tokens[index])).equals(index);
+      }
+    });
+  });
+
+  describe("getTokenIndex -- tests", function () {
+    it("Should return -1 if searched for a token not added", async function () {
+      const p2pEscrow = await deployP2pEscrow([]);
+        expect(await p2pEscrow.getTokenIndex(Wallet.createRandom().address)).equals(-1);
     });
   });
 

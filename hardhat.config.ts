@@ -4,12 +4,13 @@ import "hardhat-gas-reporter";
 import "dotenv/config";
 import "hardhat-deploy";
 import { getEnvVariable } from "./scripts/commons";
+import "solidity-coverage";
 
 const INFURA_API_KEY = getEnvVariable("INFURA_API_KEY");
 const DEPLOYER_PRIVATE_KEY = getEnvVariable("DEPLOYER_PRIVATE_KEY");
 const MNEMONIC = getEnvVariable("MNEMONIC");
 const COIN_MARKETCAP_API_KEY = getEnvVariable("COIN_MARKETCAP_API_KEY");
-const REPORT_GAS=getEnvVariable("REPORT_GAS");
+const REPORT_GAS = getEnvVariable("REPORT_GAS");
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",
