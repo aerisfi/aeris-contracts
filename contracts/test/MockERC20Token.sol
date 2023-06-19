@@ -1,17 +1,17 @@
-// contracts/SimpleToken.sol
+// contracts/MockERC20Token.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /**
- * @title SimpleToken
+ * @title MockERC20Token
  * @dev Very simple ERC20 Token example, where all tokens are pre-assigned to the creator.
  * Note they can later distribute these tokens as they wish using `transfer` and other
  * `ERC20` functions.
  * Based on https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v2.5.1/contracts/examples/SimpleToken.sol
  */
-contract SimpleToken is ERC20 {
+contract MockERC20Token is ERC20 {
     /**
      * @dev Constructor that gives msg.sender all of existing tokens.
      */
@@ -19,7 +19,7 @@ contract SimpleToken is ERC20 {
         string memory name,
         string memory symbol,
         uint256 initialSupply
-    ) public ERC20(name, symbol) {
+    )  ERC20(name, symbol) {
         _mint(msg.sender, initialSupply);
     }
 }

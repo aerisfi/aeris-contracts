@@ -4,7 +4,7 @@ import { toUtf8Bytes } from "ethers/lib/utils";
 import { ethers } from "hardhat";
 import { HashZero } from "@ethersproject/constants";
 import { arrayify, BytesLike, concat, hexlify } from "@ethersproject/bytes";
-import { SimpleToken } from "../typechain-types";
+import { MockERC20Token } from "../typechain-types";
 import { Wallet } from "ethers";
 import { setTimeout } from "timers/promises";
 
@@ -15,14 +15,14 @@ describe("P2PEscrow", function () {
     const P2PEscrow = await ethers.getContractFactory("P2PEscrow");
     const p2pEscrow = await P2PEscrow.deploy([]);
 
-    const SendSimpleToken = await ethers.getContractFactory("SimpleToken");
+    const SendSimpleToken = await ethers.getContractFactory("MockERC20Token");
     const sendSimpleToken = await SendSimpleToken.deploy(
       "SendSimple",
       "SSYM",
       "10000000000000000000000"
     );
 
-    const ReceiveSimpleToken = await ethers.getContractFactory("SimpleToken");
+    const ReceiveSimpleToken = await ethers.getContractFactory("MockERC20Token");
     const receiveSimpleToken = await ReceiveSimpleToken.connect(
       otherAccount
     ).deploy("ReceiveSimple", "RSYM", "10000000000000000000000");
@@ -47,8 +47,8 @@ describe("P2PEscrow", function () {
   async function deployAndGetToken(
     name: string,
     symbol: string
-  ): Promise<SimpleToken> {
-    const SimpleToken = await ethers.getContractFactory("SimpleToken");
+  ): Promise<MockERC20Token> {
+    const SimpleToken = await ethers.getContractFactory("MockERC20Token");
     const deployedToken = await SimpleToken.deploy(
       name,
       symbol,
