@@ -935,6 +935,23 @@ describe("P2PEscrow", function () {
     });
   });
 
+  describe("getTokenAddressByIndex -- tests", function () {
+    it("Should return address given a valid index", async function () {
+      const address = Wallet.createRandom().address
+      const p2pEscrow = await deployP2pEscrow([address]);
+      expect(
+        await p2pEscrow.getTokenAddressByIndex(0)
+      ).equals(address);
+    });
+    it("Should revert if invalid id is given", async function () {
+      const address = Wallet.createRandom().address
+      const p2pEscrow = await deployP2pEscrow([address]);
+      await expect(
+        p2pEscrow.getTokenAddressByIndex(10)
+      ).to.be.reverted;
+    });
+  });
+
   describe("Only owner tests", function () {
     it("only contract owner should be able to set the order timeout", async function () {
       const {
