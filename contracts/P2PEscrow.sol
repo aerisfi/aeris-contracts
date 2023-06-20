@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
 /**
  * @title P2PEscrow
  * @author Vamsi Krishna Srungarapu
@@ -30,7 +31,6 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
         MARKET_ORDER,
         LIMIT_ORDER
     }
-
     enum OrderStatus {
         AWAITING_DELIVERY,
         SUCCESS,
@@ -51,7 +51,7 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
         ONLY_ORDER_CREATOR_CANCEL,
         INVALID_STATE
     }
-
+    // Order struct saving the state of order details
     struct Order {
         address sender;
         uint96 swapTokenAmount;
@@ -63,26 +63,49 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
         OrderType orderType;
     }
 
+    // Default order time out duration in
+    // seconds saved at contract level
     uint32 public orderTimeoutDuration;
+    // Mapping between order id and the order object
     mapping(bytes16 => Order) orderMap;
+    // List of whitelisted token addresses
     address[] tokens;
 
     constructor(address[] memory _tokens) {
-        // Set default maturityTime period
+        // Set default order time out to 300 seconds
         orderTimeoutDuration = 300;
         tokens = _tokens;
     }
 
+    /**
+     * Helper function for transferring asset from user in to the smart contract
+     * @param user address from which the tokens are pulled in to this contract
+     * @param asset token address which is being pulled from the user
+     * @param amount amount of token address that is being pulled from user
+     */
     function _pullTokens(address user, address asset, uint256 amount) private {
         if (asset == address(0)) return;
         IERC20(asset).safeTransferFrom(user, address(this), amount);
     }
 
+    /**
+     * Helper function for transferring asset from this smart contract to user
+     * @param user asset receiving address
+     * @param asset token address which is sent to user
+     * @param amount amount of token address that is being sent to user
+     */
     function _pushTokens(address user, address asset, uint256 amount) private {
         if (asset == address(0)) return;
         IERC20(asset).safeTransfer(user, amount);
     }
 
+    /**
+     * Helper function for transferring asset from sender to receiver
+     * @param sender token sending address
+     * @param receiver token receiving address
+     * @param asset token address which is being sent from sender to receiver
+     * @param amount amount of token address that is being sent from sender to receiver
+     */
     function _sendTokens(
         address sender,
         address receiver,
@@ -93,6 +116,10 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
         IERC20(asset).safeTransferFrom(sender, receiver, amount);
     }
 
+    /**
+     * Set the default time out duration. Only contract owner can invoke this functionality
+     * @param timeoutDuration default time out duration in seconds
+     */
     function setOrderTimeout(uint32 timeoutDuration) external onlyOwner {
         orderTimeoutDuration = timeoutDuration;
     }
@@ -102,10 +129,11 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
      * @dev execute a market order or a limit order. A user who wants to
      * trade in and a user who wants to trade out should use the same order id.
      * A valid combination can be as below:
+     * Let us assume that block.timestamp is less than given timeout time while placing the order
      * User 1 --> (tokenId: 1, tokenAmount: 1_000_000, swapTokenId: 2, swapTokenAmount: 2_000_000, timeoutTime: 1686927958, orderId: o1, orderType: 0)
      * User 2 --> (tokenId: 2, tokenAmount: 2_000_000, swapTokenId: 1, swapTokenAmount: 1_000_000, timeoutTime: 1686927958, orderId: o1, orderType: 0)
      * Now, when user 1 executes the order, tokenId:1 amount is deposited into the escrow amount.
-     * Later when user 2 executes the order before the timeoutTime: 1686927958, 
+     * Later when user 2 executes the order before the timeoutTime: 1686927958,
      *  tokenId:1 amount is moved from escrow to user and tokenId: 2 amount is moved from user 2 to user 1
      * @param tokenId id of the token that user wants to trade in
      * @param tokenAmount amount of token user wants to trade in
@@ -131,7 +159,6 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
             revert OrderFailure(OrderFailureReason.DUPLICATE_ORDER);
 
         if (orderMap[orderId].sender == address(0)) {
-
             orderMap[orderId].sender = msg.sender;
             orderMap[orderId].tokenId = tokenId;
             orderMap[orderId].swapTokenId = swapTokenId;
@@ -251,15 +278,15 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
         emit CancelledOrder(orderId);
 
         _pushTokens(order.sender, tokens[order.tokenId], order.tokenAmount);
-
     }
 
     /**
-     * @notice Refund an expired waiting delivery order
+     * @notice Refund an expired waiting delivery order.
+     * Only contract owner will be able to execute the refund operation after the order timeout
      * @dev an order can be refunded only if it is expired and is in waiting delivery state
      * @param orderId order id that has to be refunded
      */
-    function refund(bytes16 orderId) external {
+    function refund(bytes16 orderId) external onlyOwner {
         Order memory order = orderMap[orderId];
         if (block.timestamp <= order.timeoutTime)
             revert RefundFailure(RefundFailureReason.REFUND_ONLY_AFTER_TIMEOUT);
@@ -270,14 +297,21 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
         emit RefundedOrder(orderId);
 
         _pushTokens(order.sender, tokens[order.tokenId], order.tokenAmount);
-
     }
 
+    /**
+     * fetch order details by order id
+     * @param orderId order id
+     */
     function getOrder(bytes16 orderId) external view returns (Order memory) {
         require(orderMap[orderId].sender != address(0), "invalid order id");
         return orderMap[orderId];
     }
 
+    /**
+     * get index of the whitelisted token address
+     * @param token whitelisted token address
+     */
     function getTokenIndex(address token) external view returns (int) {
         for (uint i = 0; i < tokens.length; i++) {
             if (tokens[i] == token) return int(i);
@@ -285,12 +319,32 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
         return -1;
     }
 
+    /**
+     * get whitelisted token address by index
+     * @param index whitelisted token index
+     */
+    function getTokenAddressByIndex(
+        uint index
+    ) external view returns (address) {
+        require(index < tokensLength(), "invalid index");
+        return tokens[index];
+    }
+
+    /**
+     * @notice The smart contract owner can add tokens to the contract and whitelist them
+     * for using in executing the market order or limit order
+     * @param inputTokens tokens that have to be whitelisted
+     */
     function addTokens(address[] calldata inputTokens) external onlyOwner {
         for (uint i = 0; i < inputTokens.length; i++) {
             tokens.push(inputTokens[i]);
         }
     }
 
+    /**
+     * @notice helper function to find the total number of whitelisted
+     * tokens in the smart contract
+     */
     function tokensLength() public view returns (uint) {
         return tokens.length;
     }
