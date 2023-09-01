@@ -28,10 +28,16 @@ contract Escrow is Ownable2Step, ReentrancyGuard, IQuote {
         return quoteStatus[orderHash];
     }
 
-    function serveOrder(OrderQuote memory quote, bytes32 orderHash) internal {
+    function serveOrder(OrderQuote memory quote) external {
+        bytes32 orderHash = _hashOrderQuote(quote);
+        OrderStatus status = quoteStatus[orderHash];
         require(
             _msgSender() != quote.sender,
             "order creator cannot serve the order"
+        );
+        require(
+            status == OrderStatus.RECEIVED,
+            "order should be received before serving it"
         );
         quoteStatus[orderHash] = OrderStatus.FULFILLED;
         _sendTokens(
@@ -52,20 +58,15 @@ contract Escrow is Ownable2Step, ReentrancyGuard, IQuote {
         bytes32 orderHash = _hashOrderQuote(quote);
         OrderStatus status = quoteStatus[orderHash];
         require(
-            status != OrderStatus.CANCELLED,
-            "a cancelled order cannot be executed"
+            status == OrderStatus.UN_INITIATED,
+            "order should not be initiated before"
         );
-        if (status == OrderStatus.UN_INITIATED) {
-            require(
-                _msgSender() == quote.sender,
-                "transaction initiator should be order creator"
-            );
-            quoteStatus[orderHash] = OrderStatus.RECEIVED;
-            return;
-        }
-        if (status == OrderStatus.RECEIVED) {
-            serveOrder(quote, orderHash);
-        }
+        require(
+            _msgSender() == quote.sender,
+            "transaction initiator should be order creator"
+        );
+        quoteStatus[orderHash] = OrderStatus.RECEIVED;
+        return;
     }
 
     function marketOrder(OrderQuote memory quote) external {

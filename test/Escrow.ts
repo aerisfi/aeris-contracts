@@ -158,7 +158,7 @@ describe("Escrow", function () {
         otherAccount.address
       );
 
-      await otherUserEscrow.marketOrder({
+      await otherUserEscrow.serveOrder({
         orderId: orderId,
         sender: owner.address,
         outTokenAmount: RECEIVE_AMOUNT,
