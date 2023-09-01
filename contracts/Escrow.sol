@@ -6,6 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
+import "hardhat/console.sol";
 
 import "./interfaces/IQuote.sol";
 
@@ -32,7 +33,7 @@ contract Escrow is Ownable2Step, ReentrancyGuard, IQuote {
         bytes32 orderHash = _hashOrderQuote(quote);
         OrderStatus status = quoteStatus[orderHash];
         require(
-            _msgSender() != quote.sender,
+            _msgSender() != quote.creator,
             "order creator cannot serve the order"
         );
         require(
@@ -41,17 +42,18 @@ contract Escrow is Ownable2Step, ReentrancyGuard, IQuote {
         );
         quoteStatus[orderHash] = OrderStatus.FULFILLED;
         _sendTokens(
-            quote.sender,
+            quote.creator,
             _msgSender(),
             tokens[quote.inTokenId],
             quote.inTokenAmount
         );
         _sendTokens(
             _msgSender(),
-            quote.sender,
+            quote.creator,
             tokens[quote.outTokenId],
             quote.outTokenAmount
         );
+        emit FulfilledOrder(quote.orderId);
     }
 
     function executeOrder(OrderQuote memory quote) internal {
@@ -62,7 +64,7 @@ contract Escrow is Ownable2Step, ReentrancyGuard, IQuote {
             "order should not be initiated before"
         );
         require(
-            _msgSender() == quote.sender,
+            _msgSender() == quote.creator,
             "transaction initiator should be order creator"
         );
         quoteStatus[orderHash] = OrderStatus.RECEIVED;
@@ -72,6 +74,7 @@ contract Escrow is Ownable2Step, ReentrancyGuard, IQuote {
     function marketOrder(OrderQuote memory quote) external {
         require(quote.orderType == OrderType.MARKET_ORDER);
         executeOrder(quote);
+        emit ReceivedOrder(quote.orderId);
     }
 
     function cancelOrder(OrderQuote memory quote) external {
@@ -80,7 +83,12 @@ contract Escrow is Ownable2Step, ReentrancyGuard, IQuote {
             quoteStatus[orderHash] == OrderStatus.RECEIVED,
             "incorrect order state"
         );
+        require(
+            (msg.sender == quote.creator || msg.sender == owner()),
+            "order can be cancelled by order creator or contract owner only"
+        );
         quoteStatus[orderHash] = OrderStatus.CANCELLED;
+        emit CancelledOrder(quote.orderId);
     }
 
     /**
@@ -150,7 +158,8 @@ contract Escrow is Ownable2Step, ReentrancyGuard, IQuote {
         return
             keccak256(
                 abi.encodePacked(
-                    address(this),
+                    quote.orderId,
+                    quote.creator,
                     quote.outTokenAmount,
                     quote.outTokenId,
                     quote.inTokenAmount,

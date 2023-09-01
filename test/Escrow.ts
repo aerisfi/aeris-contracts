@@ -106,7 +106,7 @@ describe("Escrow", function () {
       );
       await escrow.marketOrder({
         orderId: orderId,
-        sender: owner.address,
+        creator: owner.address,
         outTokenAmount: receiveAmount,
         inTokenAmount: sendAmount,
         inTokenId: sendTokenId,
@@ -139,7 +139,7 @@ describe("Escrow", function () {
 
       await escrow.marketOrder({
         orderId: orderId,
-        sender: owner.address,
+        creator: owner.address,
         outTokenAmount: RECEIVE_AMOUNT,
         inTokenAmount: SEND_AMOUNT,
         inTokenId: sendSimpleTokenId,
@@ -160,7 +160,7 @@ describe("Escrow", function () {
 
       await otherUserEscrow.serveOrder({
         orderId: orderId,
-        sender: owner.address,
+        creator: owner.address,
         outTokenAmount: RECEIVE_AMOUNT,
         inTokenAmount: SEND_AMOUNT,
         inTokenId: sendSimpleTokenId,
@@ -201,7 +201,7 @@ describe("Escrow", function () {
 
       await escrow.marketOrder({
         orderId: orderId,
-        sender: owner.address,
+        creator: owner.address,
         outTokenAmount: RECEIVE_AMOUNT,
         inTokenAmount: SEND_AMOUNT,
         inTokenId: sendSimpleTokenId,
@@ -215,7 +215,7 @@ describe("Escrow", function () {
       await expect(
         escrow.marketOrder({
           orderId: orderId,
-          sender: owner.address,
+          creator: owner.address,
           outTokenAmount: RECEIVE_AMOUNT,
           inTokenAmount: SEND_AMOUNT,
           inTokenId: sendSimpleTokenId,
@@ -226,203 +226,201 @@ describe("Escrow", function () {
     });
   });
 
-  //   describe("Cancel Order", function () {
-  //     // Cancel Order tests
-  //     it("Should cancel AWAITING_DELIVERY order", async function () {
-  //       const {
-  //         escrow,
-  //         owner,
-  //         sendSimpleToken,
-  //         sendSimpleTokenId,
-  //         receiveSimpleTokenId,
-  //       } = await loadFixture(setup);
-  //       const orderId = bytes16("1");
-  //       const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
-  //         owner.address
-  //       );
-  //       await sendSimpleToken.approve(escrow.address, SEND_AMOUNT);
-  //       await escrow.marketOrder(
-  //         sendSimpleTokenId,
-  //         SEND_AMOUNT,
-  //         receiveSimpleTokenId,
-  //         RECEIVE_AMOUNT,
-  //         orderId
-  //       );
-  //       const balanceAfterDeposit = await sendSimpleToken.balanceOf(
-  //         owner.address
-  //       );
-  //       expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(SEND_AMOUNT);
+    describe("Cancel Order", function () {
+      // Cancel Order tests
+      it("Should cancel a received order", async function () {
+        const {
+          escrow,
+          owner,
+          sendSimpleToken,
+          sendSimpleTokenId,
+          receiveSimpleTokenId,
+        } = await loadFixture(setup);
+        const orderId = bytes16("1");
+        const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
+          owner.address
+        );
+        await sendSimpleToken.approve(escrow.address, SEND_AMOUNT);
+        const orderQuote = {
+            orderId: orderId,
+            creator: owner.address,
+            outTokenAmount: RECEIVE_AMOUNT,
+            inTokenAmount: SEND_AMOUNT,
+            inTokenId: sendSimpleTokenId,
+            outTokenId: receiveSimpleTokenId,
+            orderType: 0,
+          }
+        escrow.marketOrder(orderQuote)
+        const balanceAfterDeposit = await sendSimpleToken.balanceOf(
+          owner.address
+        );
+        expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(0);
 
-  //       expect(
-  //         await escrow.getOrder(orderId).then((tx) => tx.status)
-  //       ).to.be.eq(0);
+        expect(
+          await escrow.getOrderStatus(orderQuote)
+        ).to.be.eq(1);
 
-  //       await expect(escrow.cancelOrder(orderId))
-  //         .to.emit(escrow, "CancelledOrder")
-  //         .withArgs(orderId);
-  //       const balanceAfterCancelOrder = await sendSimpleToken.balanceOf(
-  //         owner.address
-  //       );
-  //       expect(balanceBeforeDeposit).equals(balanceAfterCancelOrder);
-  //     });
+        await expect(escrow.cancelOrder(orderQuote))
+          .to.emit(escrow, "CancelledOrder")
+          .withArgs(orderId);
+        const balanceAfterCancelOrder = await sendSimpleToken.balanceOf(
+          owner.address
+        );
+        expect(balanceBeforeDeposit).equals(balanceAfterCancelOrder);
+      });
 
-  //     it("Should set order status to CANCELLED", async function () {
-  //       const {
-  //         escrow,
-  //         owner,
-  //         sendSimpleToken,
-  //         sendSimpleTokenId,
-  //         otherAccount,
-  //         receiveSimpleToken,
-  //         receiveSimpleTokenId,
-  //       } = await loadFixture(setup);
-  //       const receiverAddress = otherAccount.address;
-  //       const orderId = bytes16("1");
-  //       await sendSimpleToken.approve(escrow.address, SEND_AMOUNT);
-  //       const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
-  //         owner.address
-  //       );
-  //       await escrow.marketOrder(
-  //         sendSimpleTokenId,
-  //         SEND_AMOUNT,
-  //         receiveSimpleTokenId,
-  //         RECEIVE_AMOUNT,
-  //         orderId
-  //       );
+      it("Should set order status to CANCELLED", async function () {
+        const {
+          escrow,
+          owner,
+          sendSimpleToken,
+          sendSimpleTokenId,
+          otherAccount,
+          receiveSimpleToken,
+          receiveSimpleTokenId,
+        } = await loadFixture(setup);
+        const receiverAddress = otherAccount.address;
+        const orderId = bytes16("1");
+        await sendSimpleToken.approve(escrow.address, SEND_AMOUNT);
+        const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
+          owner.address
+        );
+        const orderQuote = {
+            orderId: orderId,
+            creator: owner.address,
+            outTokenAmount: RECEIVE_AMOUNT,
+            inTokenAmount: SEND_AMOUNT,
+            inTokenId: sendSimpleTokenId,
+            outTokenId: receiveSimpleTokenId,
+            orderType: 0,
+          }
+        await escrow.marketOrder(orderQuote);
 
-  //       const balanceAfterDeposit = await sendSimpleToken.balanceOf(
-  //         owner.address
-  //       );
-  //       expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(SEND_AMOUNT);
+        const balanceAfterDeposit = await sendSimpleToken.balanceOf(
+          owner.address
+        );
+        expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(0);
 
-  //       await expect(escrow.cancelOrder(orderId))
-  //         .to.emit(escrow, "CancelledOrder")
-  //         .withArgs(orderId);
-  //       // Ensure order status is CANCELLED.
-  //       expect(
-  //         await escrow.getOrder(orderId).then((tx) => tx.status)
-  //       ).to.be.eq(3);
-  //     });
+        await expect(escrow.cancelOrder(orderQuote))
+          .to.emit(escrow, "CancelledOrder")
+          .withArgs(orderId);
+        // Ensure order status is CANCELLED.
+        expect(
+          await escrow.getOrderStatus(orderQuote)
+        ).to.be.eq(3);
+      });
 
-  //     it("Should be cancelled only by order sender", async function () {
-  //       const {
-  //         escrow,
-  //         owner,
-  //         sendSimpleToken,
-  //         sendSimpleTokenId,
-  //         otherAccount,
-  //         receiveSimpleToken,
-  //         receiveSimpleTokenId,
-  //       } = await loadFixture(setup);
-  //       const receiverAddress = otherAccount.address;
-  //       const orderId = bytes16("1");
-  //       await sendSimpleToken.approve(escrow.address, SEND_AMOUNT);
-  //       const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
-  //         owner.address
-  //       );
+      it("Should be cancelled only by order sender", async function () {
+        const {
+          escrow,
+          owner,
+          sendSimpleToken,
+          sendSimpleTokenId,
+          otherAccount,
+          receiveSimpleToken,
+          receiveSimpleTokenId,
+        } = await loadFixture(setup);
+        const receiverAddress = otherAccount.address;
+        const orderId = bytes16("1");
+        await sendSimpleToken.approve(escrow.address, SEND_AMOUNT);
+        const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
+          owner.address
+        );
+        const orderQuote = {
+            orderId: orderId,
+            creator: owner.address,
+            outTokenAmount: RECEIVE_AMOUNT,
+            inTokenAmount: SEND_AMOUNT,
+            inTokenId: sendSimpleTokenId,
+            outTokenId: receiveSimpleTokenId,
+            orderType: 0,
+          }
+        await escrow.marketOrder(orderQuote);
+        const balanceAfterDeposit = await sendSimpleToken.balanceOf(
+          owner.address
+        );
+        expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(0);
 
-  //       await escrow.marketOrder(
-  //         sendSimpleTokenId,
-  //         SEND_AMOUNT,
-  //         receiveSimpleTokenId,
-  //         RECEIVE_AMOUNT,
-  //         orderId
-  //       );
-  //       const balanceAfterDeposit = await sendSimpleToken.balanceOf(
-  //         owner.address
-  //       );
-  //       expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(SEND_AMOUNT);
+        // The order is being cancelled by a user other than the sender. So, this should be reverted
+        await expect(escrow.connect(otherAccount).cancelOrder(orderQuote)).to.be
+          .reverted;
 
-  //       // The order is being cancelled by a user other than the sender. So, this should be reverted
-  //       await expect(escrow.connect(otherAccount).cancelOrder(orderId)).to.be
-  //         .reverted;
+        // Now the order is being cancelled by the sender. So, this should be successful
+        await expect(escrow.cancelOrder(orderQuote))
+          .to.emit(escrow, "CancelledOrder")
+          .withArgs(orderId);
+      });
 
-  //       // Now the order is being cancelled by the sender. So, this should be successful
-  //       await expect(escrow.cancelOrder(orderId))
-  //         .to.emit(escrow, "CancelledOrder")
-  //         .withArgs(orderId);
-  //     });
+      it("Can be cancelled by contract owner", async function () {
+        const {
+          escrow,
+          owner,
+          sendSimpleToken,
+          sendSimpleTokenId,
+          otherAccount,
+          receiveSimpleToken,
+          receiveSimpleTokenId,
+        } = await loadFixture(setup);
+        const orderId = bytes16("1");
+        const sendTokenContract = receiveSimpleToken.connect(otherAccount)
+        await sendTokenContract.approve(escrow.address, RECEIVE_AMOUNT);
+        const balanceBeforeDeposit = await receiveSimpleToken.balanceOf(
+          otherAccount.address
+        );
+        const orderQuote = {
+            orderId: orderId,
+            creator: otherAccount.address,
+            outTokenAmount: RECEIVE_AMOUNT,
+            inTokenAmount: SEND_AMOUNT,
+            inTokenId: sendSimpleTokenId,
+            outTokenId: receiveSimpleTokenId,
+            orderType: 0,
+          }
+        await escrow.connect(otherAccount).marketOrder(orderQuote);
+        const balanceAfterDeposit = await receiveSimpleToken.balanceOf(
+          otherAccount.address
+        );
+        expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(0);
 
-  //     it("Can be cancelled by contract owner", async function () {
-  //       const {
-  //         escrow,
-  //         owner,
-  //         sendSimpleToken,
-  //         sendSimpleTokenId,
-  //         otherAccount,
-  //         receiveSimpleToken,
-  //         receiveSimpleTokenId,
-  //       } = await loadFixture(setup);
-  //       const orderId = bytes16("1");
-  //       const sendTokenContract = receiveSimpleToken.connect(otherAccount)
-  //       await sendTokenContract.approve(escrow.address, RECEIVE_AMOUNT);
-  //       const balanceBeforeDeposit = await receiveSimpleToken.balanceOf(
-  //         otherAccount.address
-  //       );
+        // The order is being cancelled by the contract owner. So, this should be successful
+        await expect(escrow.connect(owner).cancelOrder(orderQuote))
+          .to.emit(escrow, "CancelledOrder")
+          .withArgs(orderId);
+      });
 
-  //       await escrow.connect(otherAccount).marketOrder(
-  //         receiveSimpleTokenId,
-  //         RECEIVE_AMOUNT,
-  //         sendSimpleTokenId,
-  //         SEND_AMOUNT,
-  //         orderId
-  //       );
-  //       const balanceAfterDeposit = await receiveSimpleToken.balanceOf(
-  //         otherAccount.address
-  //       );
-  //       expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(RECEIVE_AMOUNT);
+      it("Should revert cancel order if already cancelled", async function () {
+        const {
+          escrow,
+          owner,
+          sendSimpleToken,
+          sendSimpleTokenId,
+          otherAccount,
+          receiveSimpleToken,
+          receiveSimpleTokenId,
+        } = await loadFixture(setup);
+        const receiverAddress = otherAccount.address;
+        const orderId = bytes16("1");
+        await sendSimpleToken.approve(escrow.address, SEND_AMOUNT * 2);
+        const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
+          owner.address
+        );
+        const orderQuote = {
+            orderId: orderId,
+            creator: owner.address,
+            outTokenAmount: RECEIVE_AMOUNT,
+            inTokenAmount: SEND_AMOUNT,
+            inTokenId: sendSimpleTokenId,
+            outTokenId: receiveSimpleTokenId,
+            orderType: 0,
+          }
+        await escrow.marketOrder(orderQuote);
 
-  //       // The order is being cancelled by the contract owner. So, this should be successful
-  //       await expect(escrow.cancelOrder(orderId))
-  //         .to.emit(escrow, "CancelledOrder")
-  //         .withArgs(orderId);
-  //     });
-
-  //     it("Should revert cancel order if already cancelled", async function () {
-  //       const {
-  //         escrow,
-  //         owner,
-  //         sendSimpleToken,
-  //         sendSimpleTokenId,
-  //         otherAccount,
-  //         receiveSimpleToken,
-  //         receiveSimpleTokenId,
-  //       } = await loadFixture(setup);
-  //       const receiverAddress = otherAccount.address;
-  //       const orderId = bytes16("1");
-  //       await escrow.setOrderTimeout(0);
-  //       await sendSimpleToken.approve(escrow.address, SEND_AMOUNT * 2);
-  //       const balanceBeforeDeposit = await sendSimpleToken.balanceOf(
-  //         owner.address
-  //       );
-
-  //       await escrow.marketOrder(
-  //         sendSimpleTokenId,
-  //         SEND_AMOUNT,
-  //         receiveSimpleTokenId,
-  //         RECEIVE_AMOUNT,
-  //         orderId
-  //       );
-  //       await escrow.marketOrder(
-  //         sendSimpleTokenId,
-  //         SEND_AMOUNT,
-  //         receiveSimpleTokenId,
-  //         RECEIVE_AMOUNT,
-  //         bytes16("2")
-  //       );
-  //       const balanceAfterDeposit = await sendSimpleToken.balanceOf(
-  //         owner.address
-  //       );
-  //       expect(balanceBeforeDeposit.sub(balanceAfterDeposit)).equals(
-  //         2 * SEND_AMOUNT
-  //       );
-
-  //       await expect(escrow.cancelOrder(orderId))
-  //         .to.emit(escrow, "CancelledOrder")
-  //         .withArgs(orderId);
-  //       await expect(escrow.cancelOrder(orderId)).to.be.reverted;
-  //     });
-  //   });
+        await expect(escrow.cancelOrder(orderQuote))
+          .to.emit(escrow, "CancelledOrder")
+          .withArgs(orderId);
+        await expect(escrow.cancelOrder(orderQuote)).to.be.reverted;
+      });
+    });
 
   describe("Add multiple tokens", function () {
     it("Should add multiple tokens", async function () {

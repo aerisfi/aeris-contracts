@@ -13,7 +13,7 @@ interface IQuote {
     }
     struct OrderQuote {
         bytes16 orderId;
-        address sender;
+        address creator;
         uint96 outTokenAmount;
         uint96 inTokenAmount;
         uint16 inTokenId;
@@ -26,4 +26,7 @@ interface IQuote {
         FULFILLED,
         CANCELLED
     }
+    event ReceivedOrder(bytes16 orderId);
+    event FulfilledOrder(bytes16 orderId);
+    event CancelledOrder(bytes16 orderId);
 }
