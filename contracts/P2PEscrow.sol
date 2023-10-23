@@ -262,12 +262,12 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
 
     /**
      * @notice Cancel a waiting order
-     * @dev a user who created the order first with the given order id can only cancel the order
+     * @dev a user who created the order first with the given order id or the smart contract owner can only cancel the order
      * @param orderId order id that has to be cancelled
      */
     function cancelOrder(bytes16 orderId) external {
         Order memory order = orderMap[orderId];
-        if (msg.sender != order.sender)
+        if (!(msg.sender == order.sender || msg.sender == owner()))
             revert CancelOrderFailure(
                 CancelOrderFailureReason.ONLY_ORDER_CREATOR_CANCEL
             );
@@ -276,25 +276,6 @@ contract P2PEscrow is Ownable, ReentrancyGuard {
 
         orderMap[orderId].status = OrderStatus.CANCELLED;
         emit CancelledOrder(orderId);
-
-        _pushTokens(order.sender, tokens[order.tokenId], order.tokenAmount);
-    }
-
-    /**
-     * @notice Refund an expired waiting delivery order.
-     * Only contract owner will be able to execute the refund operation after the order timeout
-     * @dev an order can be refunded only if it is expired and is in waiting delivery state
-     * @param orderId order id that has to be refunded
-     */
-    function refund(bytes16 orderId) external onlyOwner {
-        Order memory order = orderMap[orderId];
-        if (block.timestamp <= order.timeoutTime)
-            revert RefundFailure(RefundFailureReason.REFUND_ONLY_AFTER_TIMEOUT);
-        if (order.status != OrderStatus.AWAITING_DELIVERY)
-            revert RefundFailure(RefundFailureReason.INVALID_STATE);
-
-        orderMap[orderId].status = OrderStatus.REFUNDED;
-        emit RefundedOrder(orderId);
 
         _pushTokens(order.sender, tokens[order.tokenId], order.tokenAmount);
     }
