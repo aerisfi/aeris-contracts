@@ -15,7 +15,12 @@
     "solidity-coverage": "^0.8.2"
   },
   "dependencies": {
+    "@aave/core-v3": "^1.18.0",
+    "@nomicfoundation/hardhat-verify": "^1.0.4",
     "@openzeppelin/contracts": "^4.9.2",
+    "@tenderly/hardhat-tenderly": "^1.7.7",
+    "@uniswap/v2-periphery": "^1.1.0-beta.0",
+    "@uniswap/v3-periphery": "^1.4.4",
     "dotenv": "^16.1.4"
   }
 }
